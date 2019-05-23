@@ -54,7 +54,7 @@ In the directory "scr1", I have included its whole source code. You can enter it
 
 If you open the definition of "USE_SSRV", SSRV CPU core will take over the authority of imem and dmem bus. SSRV CPU core will replace SCR1 to fulfil simulation tests. You can disable SSRV CPU core through removing the definition of "USE_SSRV".
 
-In "rtl" directory, open the file "define_para.v", you can open it and give you own parameters to make different performance CPU core.
+In "rtl" directory, open the file "define_para.v", you can open it and give you own parameters to make different performance CPU core. I have uploaded three hex files, which could generate data of benchmark test list. In "build" directory, "test_info" will list these hex files and you can use "#" to exclude some you do not want to run.
 
 Welcome to my high performance CPU world!!! I need your help to make it more powerful. Feel free to write me: [risclite@gmail.com] 
 
