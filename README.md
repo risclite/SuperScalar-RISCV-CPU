@@ -44,6 +44,7 @@ First, you should determine the sum of "FETCH_LEN" and "QUEUE_LEN" according to 
 
 ## Status ##
 This project is just starting. The "SYS_CSR" module is incomplete because system and CSR-related instructions are not detailed as clearly as other instructions in one pdf. I only supply basic function to cope with simulation tests of SCR1. This part should be developed in the future.
+
 Lack of hardware multiply and divide functions makes its CoreMark score bad. So RV32M should be added to this new super-scalar CPU core.
 
 ## How to start ##
