@@ -1,5 +1,5 @@
 # SuperScalar-RISCV-CPU
-fully super-scalar rv32i cpu core, 3.8 DMIPS/MHz(best performance)
+super-scalar out-of-order rv32i cpu core, 3.8 DMIPS/MHz(best performance)
 
 
 ## Overview ##
