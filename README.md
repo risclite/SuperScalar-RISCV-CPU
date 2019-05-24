@@ -17,6 +17,8 @@ The 2nd stage: SSRV will fetch "BUS_LEN" number of 32-bit instructions in one cy
 
 We always  know there is data dependency of instructions, which will make some instruction will not be issued to "execute" stage. For a pessimist, it is a bad luck to have an instruction that could not be executed; but for an optimist, it is a good luck because in the very next cycle, the same instruction will have more possibility to be executed than others. So, one of "FETCH_LEN" number of instructions will have two destinies, go to "EXEC_LEN" number of "EXEC" area to be executed; or go to "QUEUE_LEN" number of "QUEUE" area to be the top list of ones evaluated in the next cycle.
 
+Note that: instructions in "QUEUE" area are not execuated but treated as being execuated. Instructions behind these could be issued when they are not writing to source or destination registers of all "QUEUE" instructions.
+
 If it is a configuration of 3-stage, all "EXEC_LEN" instructions are registered, or they are delivered directly.
 
 The 3rd stage: Every instruction in "EXEC" area has its own ALU, which fetch operands  or store "Rd" between "register file", and send memory operation to "memory buffer". The last ALU will share its channel to "register file" with "SYS_CSR", which is dedicated to system or CSR-related instructions.  
