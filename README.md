@@ -1,10 +1,10 @@
 # SuperScalar-RISCV-CPU
-super-scalar out-of-order rv32i cpu core, 3.8 DMIPS/MHz(best performance)
+super-scalar out-of-order rv32imc cpu core, 4+ DMIPS/MHz(best performance) 2+ DMIPS/MHz(with noinline option)
 
 
 ## Overview ##
 
-SSRV (SuperScalar RISC-V)  is an open-source RV32I core, which is superscalar (able to execute multiple instructions per cycle) and out-of-order (able to execute instructions as their dependencies are resolved and not restricted to their program order).   It is synthesizable fully( written in native verilog-2001) and parameterizable fully ( You can define how many instructions executed in the same cycle, how depth out-of-order could reach). It has outstanding integer processing ability: DMIPS/MHz : 3.8/3.6 (2/3-stage, without -fno-inline compiler options); 2.14/1.95 (2/3-stage,-O3 -fno-inline).
+SSRV (SuperScalar RISC-V) is an open-source RV32IMC core, which is superscalar and out-of-order. It is synthesizable  and parameterizable. It has outstanding integer processing ability: DMIPS/MHz : 4.2/4.0 (2/3-stage, without -fno-inline compiler options); 2.3/2.1 (2/3-stage,-O3 -fno-inline). It is very flexible to customize different performance.
 
 
 ## Principle ##
@@ -32,11 +32,11 @@ This project is inspired and based on Syntacore's core: SCR1 [https://github.com
 
 |               |SCR1           | SSRV(3-stage) FETCH_LEN=1 QUEUE_LEN=1 EXEC_LEN=1 |SSRV(3-stage) FETCH_LEN=2 QUEUE_LEN=2 EXEC_LEN=2 | SSRV(3-stage) FETCH_LEN=3 QUEUE_LEN=2 EXEC_LEN=3  | SSRV(2-stage) FETCH_LEN=2 QUEUE_LEN=2 EXEC_LEN=2 | SSRV(2-stage) FETCH_LEN=3 QUEUE_LEN=2 EXEC_LEN=3 |
 | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
-| DMIPS/MHz:(-O3 -fno-inline) | 1.10 |1.34 <br> (parallel ratio: 0----11%<br> 1----89%) |1.79 <br> (parallel ratio: <br> 0----17% <br> 1----47% <br> 2----36%) | 1.90 <br> (parallel ratio: 0----20% <br> 1----45% <br> 2----23% <br> 3----12%) |  2.00 <br> (parallel ratio: <br> 0----10% <br> 1----48% <br> 2----42%) | 2.14 <br> (parallel ratio: <br> 0----15% <br> 1----43% <br> 2----27% <br> 3----15%) |
-| DMIPS/MHz:(default of SCR1) | 1.96 |2.59 <br> (parallel ratio: 0----7%<br> 1----93%) | 3.31 <br> (parallel ratio: <br> 0----14% <br> 1----52% <br> 2----34%) | 3.53 <br> (parallel ratio: <br> 0----16% <br> 1----50% <br> 2----25% <br> 3----9%) |  3.58 <br> (parallel ratio: <br> 0----7% <br> 1----56% <br> 2----37%) | 3.80 <br> (parallel ratio: <br> 0----10% <br> 1----53% <br> 2----26% <br> 3----11%) |
-| ticks per iteration of CoreMark(default of SCR1) | 7896 | 8834 <br> (parallel ratio: 0----19%<br> 1----81%) |6811 <br> (parallel ratio: <br> 0----24% <br> 1----46% <br> 2----30%) | 6663 <br> (parallel ratio: <br> 0----26% <br> 1----50% <br> 2----13% <br> 3----11%) | 5385 <br> (parallel ratio: <br> 0----5% <br> 1----57% <br> 2----38%) | 5232 <br> (parallel ratio: <br> 0----8% <br> 1----62% <br> 2----16% <br> 3----14%) |
+| DMIPS/MHz:(-O3 -fno-inline) | 1.14 |1.51 <br> (parallel ratio: 0----12%<br> 1----88%) |2.01 <br> (parallel ratio: <br> 0----17% <br> 1----48% <br> 2----35%) | 2.13 <br> (parallel ratio: 0----20% <br> 1----46% <br> 2----22% <br> 3----12%) |  2.21 <br> (parallel ratio: <br> 0----11% <br> 1----49% <br> 2----40%) | 2.35 <br> (parallel ratio: <br> 0----14% <br> 1----49% <br> 2----23% <br> 3----14%) |
+| DMIPS/MHz:(default of SCR1) | 1.93 |2.95 <br> (parallel ratio: 0----8%<br> 1----92%) | 3.74 <br> (parallel ratio: <br> 0----14% <br> 1----54% <br> 2----32%) | 4.01 <br> (parallel ratio: <br> 0----16% <br> 1----51% <br> 2----24% <br> 3----9%) |  3.98 <br> (parallel ratio: <br> 0----9% <br> 1----57% <br> 2----34%) | 4.25 <br> (parallel ratio: <br> 0----13% <br> 1----52% <br> 2----25% <br> 3----10%) |
+| ticks per iteration of CoreMark(default of SCR1) | 3621 | 3585 <br> (parallel ratio: 0----21%<br> 1----79%) |2862 <br> (parallel ratio: <br> 0----28% <br> 1----46% <br> 2----26%) | 2793 <br> (parallel ratio: <br> 0----32% <br> 1----42% <br> 2----18% <br> 3----8%) | 2550 <br> (parallel ratio: <br> 0----19% <br> 1----51% <br> 2----30%) | 2482 <br> (parallel ratio: <br> 0----24% <br> 1----47% <br> 2----20% <br> 3----9%) |
 
---RISCV gcc version: 8.3.0 and Only RV32I is supported
+--RISCV gcc version: 8.3.0 
 
 
 ## Critical path ##
@@ -47,18 +47,23 @@ First, you should determine the sum of "FETCH_LEN" and "QUEUE_LEN" according to 
 ## Status ##
 This project is just starting. The "SYS_CSR" module is incomplete because system and CSR-related instructions are not detailed as clearly as other instructions in one pdf. I only supply basic function to cope with simulation tests of SCR1. This part should be developed in the future.
 
-Lack of hardware multiply and divide functions makes its CoreMark score bad. So RV32M should be added to this new super-scalar CPU core.
+RV32M and RV32C are added and could be customized.
+
 
 ## How to start ##
 Strongly recommend download simulation environment of SCR1. It supply a whole suite  of development. Its link is here: [https://github.com/syntacore/scr1]
 
-In the directory "scr1", I have included its whole source code. You can enter its sub-directory "sim", run "core.do" to build its code, run "ssrv.do" to build my core and testbench file, and run "sim.do" to make two testbench file running simultaneously. 
+In the directory "scr1", I have included its whole source code. You can enter its sub-directory "sim", run "compile.do" to compile source files of SCR1 and this core, and run "sim.do" to make two testbench file running simultaneously. 
+
+In "rtl" directory, open the file "define_para.v", you can give you own parameters to make different performance CPU core. 
 
 If you open the definition of "USE_SSRV", SSRV CPU core will take over the authority of imem and dmem bus. SSRV CPU core will replace SCR1 to fulfil simulation tests. You can disable SSRV CPU core through removing the definition of "USE_SSRV".
 
-In "rtl" directory, open the file "define_para.v", you can open it and give you own parameters to make different performance CPU core. I have uploaded three hex files, which could generate data of benchmark test list. In "build" directory, "test_info" will list these hex files and you can use "#" to exclude some you do not want to run.
+In "build" directory, "test_info" will list hex files and you can use "#" to exclude some you do not want to run.
 
-Welcome to my high performance CPU world!!! I need your help to make it more powerful. Feel free to write me: [risclite@gmail.com] 
+Welcome to my high performance CPU world!!! 
+
+[risclite@gmail.com] 
 
 
 
