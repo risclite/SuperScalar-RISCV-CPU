@@ -37,6 +37,7 @@ This project is inspired and based on Syntacore's core: SCR1 [https://github.com
 | ticks per iteration of CoreMark(default of SCR1) | 3621 | 3585 <br> (parallel ratio: 0----21%<br> 1----79%) |2862 <br> (parallel ratio: <br> 0----28% <br> 1----46% <br> 2----26%) | 2793 <br> (parallel ratio: <br> 0----32% <br> 1----42% <br> 2----18% <br> 3----8%) | 2550 <br> (parallel ratio: <br> 0----19% <br> 1----51% <br> 2----30%) | 2482 <br> (parallel ratio: <br> 0----24% <br> 1----47% <br> 2----20% <br> 3----9%) |
 
 --RISCV gcc version: 8.3.0 
+--RV32IMC
 
 
 ## Critical path ##
