@@ -20,7 +20,7 @@
 
 `define BUS_LEN            4                              //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0], it should be 1,2,4,8,16... etc
 `define FETCH_LEN          3                              //how many words CPU could use.
-`define QUEUE_LEN          1                              //how many instrs to wait 
+`define QUEUE_LEN          2                              //how many instrs to wait 
 `define EXEC_LEN           3                              //how many ALUs
 
 
@@ -28,8 +28,8 @@
 `define MEMB_LEN           4                              //depth of MEM buffer
 
 `define REGISTER_EXEC                                     //comment for 2-stage; uncomment for 3-stage.
-
-
+`define RV32C_SUPPORTED
+`define RV32M_SUPPORTED
 
 
 //Below are simulation with the help of Syntacore SCR1, you can comment or uncomment  
@@ -43,6 +43,7 @@
 
 //Below are needed by internal, you should not modify unless you are sure.
 `define XLEN               32
+`define HLEN               16
 `define RGLEN              32
 
 //for instrman.v         
@@ -50,9 +51,9 @@
 `define PC_ALIGN           ( ((1'b1<<`XLEN)-1)^( (1'b1<<($clog2(`BUS_LEN)+2))-1'b1 ) ) //1->FFFFFFFC 2->FFFFFFF8 4->FFFFFFF0
 
 //for instrbits.v
-`define BUF_OFF            $clog2(`BUF_LEN*`BUS_LEN+1)   
-`define FETCH_OFF          $clog2(`FETCH_LEN+1)          
-`define BUS_OFF            ($clog2(`BUS_LEN)+(`BUS_LEN==1))              
+`define BUF_OFF            $clog2(2*`BUF_LEN*`BUS_LEN+1)   
+`define FETCH_OFF          $clog2(2*`FETCH_LEN+1)          
+`define BUS_OFF            $clog2(2*`BUS_LEN)              
 
 //for schedule.v
 `define CODE_LEN           (`QUEUE_LEN+`FETCH_LEN)

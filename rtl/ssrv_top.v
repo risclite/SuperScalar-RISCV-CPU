@@ -50,13 +50,15 @@ module ssrv_top(
 
 	//connection for instrbits
     wire `N(`FETCH_OFF)                core_offset;
-    wire `N(`FETCH_LEN*`XLEN)          fetch_bits;
-	wire `N(`XLEN)                     fetch_pc;
+    wire `N(`FETCH_LEN*`XLEN)          fetch_instr;
+	wire `N(`FETCH_LEN*`XLEN)          fetch_pc;
+	wire `N(`FETCH_LEN)                fetch_vld;
 	
 	//connection for schedule
     wire                               mem_release;
 	wire `N(`EXEC_LEN*`XLEN)           exec_instr;
 	wire `N(`EXEC_LEN*`XLEN)           exec_pc;
+	wire `N(`EXEC_LEN)                 exec_vld;
 	
 	//connection for alu
 	wire `N(`EXEC_LEN*5)               rs0_sel, rs1_sel;
@@ -72,6 +74,11 @@ module ssrv_top(
 	//connection for mprf
 	wire `N(5)                         mem_sel;
 	wire `N(`XLEN)                     mem_data;
+`ifdef RV32M_SUPPORTED
+    wire `N(5)                         m2_sel;
+	wire `N(`XLEN)                     m2_data;
+	wire                               mul_is_busy;
+`endif
 
 
     instrman u_man(
@@ -122,8 +129,9 @@ module ssrv_top(
     .buffer_free        (    instr_buf_free      ),						
     
     //to schedule	
-    .fetch_bits         (    fetch_bits          ),
-    .fetch_pc           (    fetch_pc            )         
+    .fetch_instr        (    fetch_instr         ),
+    .fetch_pc           (    fetch_pc            ),
+    .fetch_vld          (    fetch_vld           )	
 
     );                  
 
@@ -135,18 +143,25 @@ module ssrv_top(
 	   
     //from membuf	
 	.mem_release        (    mem_release         ),
+`ifdef RV32M_SUPPORTED
+    .mem_sel            (    m2_sel              ),
+	.mul_is_busy        (    mul_is_busy         ),
+`else
 	.mem_sel            (    mem_sel             ),
+`endif	
 	
 `ifdef REGISTER_EXEC
     .jump_vld           (    jump_vld            ),
 `endif
 	            
-    .fetch_bits         (    fetch_bits          ),
+    .fetch_instr        (    fetch_instr         ),
     .fetch_pc           (    fetch_pc            ),
+	.fetch_vld          (    fetch_vld           ),
 
 	//to alu
     .exec_instr         (    exec_instr          ),
     .exec_pc            (    exec_pc             ),
+	.exec_vld           (    exec_vld            ),
 
 	//to instrbits
     .core_offset        (    core_offset         )	
@@ -165,6 +180,7 @@ module ssrv_top(
             //from schedule			
 		    .instr                   (     exec_instr[`IDX(i,`XLEN)]         ),
 		    .pc                      (     exec_pc[`IDX(i,`XLEN)]            ),
+			.vld                     (     exec_vld[i]                       ),
 		     
 		    //between mprf  
 		    .rs0_sel                 (     rs0_sel[`IDX(i,5)]                ),
@@ -198,6 +214,7 @@ module ssrv_top(
             //from schedule			
 		    .instr                   (     exec_instr[`IDX(i,`XLEN)]         ),
 		    .pc                      (     exec_pc[`IDX(i,`XLEN)]            ),
+			.vld                     (     exec_vld[i]                       ),
 		     
 		    //between mprf  
 		    .rs0_sel                 (     rs0_sel[`IDX(i,5)]                ),
@@ -227,6 +244,7 @@ module ssrv_top(
     //from schedule			
 	.instr              (    exec_instr[`IDX(`EXEC_LEN-1,`XLEN)]  ),
 	.pc                 (    exec_pc[`IDX(`EXEC_LEN-1,`XLEN)]     ),
+	.vld                (    exec_vld[`EXEC_LEN-1]                ),  
 	
 	//from mprf
     .rs0_word           (    rs0_word[`IDX(`EXEC_LEN-1,`XLEN)]    ),
@@ -245,10 +263,16 @@ module ssrv_top(
 	//system signals
 	.clk               (    clk                                 ),
 	.rst               (    rst                                 ),
-	                     
+
+`ifdef RV32M_SUPPORTED
+    //from membuf	                     
+	.mem_sel           (    m2_sel                              ),
+	.mem_data          (    m2_data                             ),
+`else	
     //from membuf	                     
 	.mem_sel           (    mem_sel                             ),
 	.mem_data          (    mem_data                            ),
+`endif	
 	
     //from alu	
 	.rg_sel            (    rg_sel                              ),
@@ -291,6 +315,31 @@ module ssrv_top(
 	
 	);
 
+`ifdef RV32M_SUPPORTED
+    mul  u_mul(
+	.clk                (    clk                                  ),
+    .rst                (    rst                                  ),		
 	
+    //from schedule			
+	.instr              (    exec_instr[`IDX(`EXEC_LEN-1,`XLEN)]  ),
+	.pc                 (    exec_pc[`IDX(`EXEC_LEN-1,`XLEN)]     ),
+	.vld                (    exec_vld[`EXEC_LEN-1]                ),  
 	
+	//from mprf
+    .rs0_word           (    rs0_word[`IDX(`EXEC_LEN-1,`XLEN)]    ),
+    .rs1_word           (    rs1_word[`IDX(`EXEC_LEN-1,`XLEN)]    ),   
+
+	//to mprf                     
+    .mem_sel           (    mem_sel                               ),
+    .mem_data          (    mem_data                              ),
+
+    //to schedule
+    .mul_is_busy       (    mul_is_busy                           ),
+
+	//to mprf
+	.m2_sel            (    m2_sel                                ),
+	.m2_data           (    m2_data                               )
+	
+    );	
+`endif	
 endmodule

@@ -25,6 +25,7 @@ module sys_csr(
 	//from schedule
 	input `N(`XLEN)                      instr,	
 	input `N(`XLEN)                      pc,
+	input                                vld,
 	
 	//from mprf
 	input `N(`XLEN)                      rs0_word,
@@ -39,7 +40,7 @@ module sys_csr(
 
 	//csr function
 	
-	wire instr_is_csr = (instr[1:0]==2'b11) & (instr[6:2]==5'b11100) & (instr[14:12]!=3'b0);
+	wire instr_is_csr = vld & (instr[1:0]==2'b11) & (instr[6:2]==5'b11100) & (instr[14:12]!=3'b0);
 	
 	wire `N(12) csr_addr = instr[31:20];
 	
@@ -122,9 +123,9 @@ module sys_csr(
 	
 	assign csr_data = csr_out;
 
-	wire instr_is_ret    = (instr==32'b0000000_00010_00000_000_00000_1110011)|(instr==32'b0001000_00010_00000_000_00000_1110011)|(instr==32'b0011000_00010_00000_000_00000_1110011);
-	wire instr_is_ecall  = (instr==32'b0000000_00000_00000_000_00000_1110011);
-	wire instr_is_fencei = (instr==32'b0000000_00000_00000_001_00000_0001111);
+	wire instr_is_ret    = vld & (instr==32'b0000000_00010_00000_000_00000_1110011)|(instr==32'b0001000_00010_00000_000_00000_1110011)|(instr==32'b0011000_00010_00000_000_00000_1110011);
+	wire instr_is_ecall  = vld & (instr==32'b0000000_00000_00000_000_00000_1110011);
+	wire instr_is_fencei = vld & (instr==32'b0000000_00000_00000_001_00000_0001111);
 	
 	assign jump_vld = (instr_is_ret|instr_is_ecall|instr_is_fencei);
 

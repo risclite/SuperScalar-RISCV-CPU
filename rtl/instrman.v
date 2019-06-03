@@ -66,7 +66,7 @@ module instrman
 	    jump_pc = sysjmp_pc;
     else
         jump_pc = alujmp_pc;	
-	jump_pc[1:0] = 2'b0;
+	jump_pc[0] = 1'b0;
 	end	
 	
 	
