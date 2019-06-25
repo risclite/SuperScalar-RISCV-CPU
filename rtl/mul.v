@@ -26,12 +26,14 @@ module mul(
 	input `N(`XLEN)                      instr,	
 	input `N(`XLEN)                      pc,
 	input                                vld,
+	input `N(`MEMB_OFF)                  cnt,
 	
 	//from mprf
 	input `N(`XLEN)                      rs0_word,
 	input `N(`XLEN)                      rs1_word,
 
 	//from membuf
+	input                                mem_release,
     input `N(5)                          mem_sel,
     input `N(`XLEN)                      mem_data,	
 	
@@ -76,18 +78,27 @@ module mul(
 	reg  `N(`XLEN)                write_data;
 	
 	wire `N(`XLEN)                rs0_data,rs1_data;
-	
+	reg `N(`MEMB_OFF)             mul_cnt;	
 	
 	wire  instr_is_mul = vld & (instr[1:0]==2'b11) & (instr[6:2]==5'b01100) & instr[25];
 
 `ifdef REGISTER_EXEC	
-	assign mul_is_busy = instr_is_mul|calc_flag|(write_flag & (mem_sel!=5'h0));
+	assign mul_is_busy = instr_is_mul|calc_flag|(write_flag & ~((mul_cnt==0) & (mem_sel==5'h0)));
 `else
     assign mul_is_busy = calc_flag|write_flag;
 `endif
 
     wire    mul_direct = instr[14] ? ((rs1_word==0)|(rs0_data<rs1_data)) : ((rs0_word==0)|(rs1_word==0));	
 	
+	`FFx(mul_cnt,0)
+	if ( instr_is_mul )
+`ifdef REGISTER_EXEC
+	    mul_cnt <= mem_release ? ( (cnt==0) ? 0 : ( cnt - 1'b1 ) ) : cnt;
+`else
+        mul_cnt <= cnt;
+`endif
+	else
+	    mul_cnt <= mem_release ? ( (mul_cnt==0) ? 0 : ( mul_cnt - 1'b1 ) ) : mul_cnt; 
 	
 	//to calcuate MUL/DIV function
 	
@@ -234,7 +245,7 @@ module mul(
 	`FFx(write_flag,0)
 	if( (instr_is_mul & mul_direct)|calc_over )
 	    write_flag <= 1'b1;
-	else if ( write_flag & (mem_sel==0) )
+	else if ( write_flag & (mem_sel==0) & (mul_cnt==0) )
 	    write_flag <= 1'b0;
 	else;
 	
@@ -246,9 +257,9 @@ module mul(
     3'h6,3'h7     :  write_data = calc_sign_rs0 ? (~calc_a+1'b1) : calc_a;
     endcase
 
-    assign m2_sel  = (write_flag & (mem_sel==0) ) ? calc_rd : mem_sel;	
+    assign m2_sel  = (write_flag & (mem_sel==0) & (mul_cnt==0) ) ? calc_rd : mem_sel;	
 	
-	assign m2_data = (write_flag & (mem_sel==0) ) ? write_data : mem_data;	
+	assign m2_data = (write_flag & (mem_sel==0) & (mul_cnt==0) ) ? write_data : mem_data;	
 
 endmodule
 

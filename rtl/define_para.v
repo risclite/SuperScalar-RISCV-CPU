@@ -20,16 +20,18 @@
 
 `define BUS_LEN            4                              //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0], it should be 1,2,4,8,16... etc
 `define FETCH_LEN          3                              //how many words CPU could use.
-`define QUEUE_LEN          2                              //how many instrs to wait 
+`define QUEUE_LEN          1                              //how many instrs to wait 
 `define EXEC_LEN           3                              //how many ALUs
 
 
-`define BUF_LEN            3                              //buffer size: BUF_LEN*BUS_LEN*XLEN(bits)
-`define MEMB_LEN           4                              //depth of MEM buffer
+`define BUF_LEN            3                               //buffer size: BUF_LEN*BUS_LEN*XLEN(bits)
+`define MEMB_LEN           8                              //depth of MEM buffer
 
-`define REGISTER_EXEC                                     //comment for 2-stage; uncomment for 3-stage.
+`define REGISTER_EXEC                                      //comment for 2-stage; uncomment for 3-stage.
 `define RV32C_SUPPORTED
 `define RV32M_SUPPORTED
+
+`define RFBUF_LEN          8
 
 
 //Below are simulation with the help of Syntacore SCR1, you can comment or uncomment  
@@ -40,11 +42,14 @@
 
 
 
-
 //Below are needed by internal, you should not modify unless you are sure.
+
+//`define DIRECT_MODE   
+
 `define XLEN               32
 `define HLEN               16
 `define RGLEN              32
+`define RGBIT              5
 
 //for instrman.v         
 `define BUS_WID            (`BUS_LEN*`XLEN)                                            //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0]  
@@ -59,13 +64,14 @@
 `define CODE_LEN           (`QUEUE_LEN+`FETCH_LEN)
 `define QUEUE_OFF          $clog2(`QUEUE_LEN+1)
 `define EXEC_OFF           $clog2(`EXEC_LEN+1)
+`define QUEUE_PARA_OFF     17
 
 //for alu.v
 `define MEMB_PARA          9
 
 //for membuf.v
 `define MEMB_OFF           $clog2(`MEMB_LEN+1)                                        //[MEMB_OFF-1:0] covers 0 ~ MEMB_LEN
-`define MEMB_UNIT          (`MEMB_PARA + `XLEN + `XLEN)
 
-
+//for mprf.v
+`define RFBUF_OFF          $clog2(`RFBUF_LEN+1)
 

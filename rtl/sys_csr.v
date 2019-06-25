@@ -34,7 +34,11 @@ module sys_csr(
 	output                               jump_vld,
 	output reg `N(`XLEN)                 jump_pc,
 	
+	output                               direct_mode,
+	output                               direct_reset,
+	
 	output `N(`XLEN)                     csr_data
+	
 
 );
 
@@ -128,6 +132,14 @@ module sys_csr(
 	wire instr_is_fencei = vld & (instr==32'b0000000_00000_00000_001_00000_0001111);
 	
 	assign jump_vld = (instr_is_ret|instr_is_ecall|instr_is_fencei);
+	
+`ifdef DIRECT_MODE	
+	assign direct_mode = 1'b1;
+`else
+    assign direct_mode = 1'b0;
+`endif
+	
+	assign direct_reset = 1'b0;
 
     `COMB
 	if ( instr_is_ret )

@@ -37,12 +37,12 @@ module ssrv_top(
 
 );
 
-    //connection for instrman
+    //signals of instrman
     wire                               sysjmp_vld;
     wire `N(`XLEN)                     sysjmp_pc;
     wire                               alujmp_vld;
     wire `N(`XLEN)                     alujmp_pc;
-    wire                               instr_buf_free;    
+    wire                               buffer_free;    
     wire                               jump_vld;
     wire `N(`XLEN)                     jump_pc;
     wire                               line_vld;
@@ -55,15 +55,18 @@ module ssrv_top(
 	wire `N(`FETCH_LEN)                fetch_vld;
 	
 	//connection for schedule
+	wire                               direct_mode;
+	wire `N(`EXEC_OFF)                 rf_release;
     wire                               mem_release;
 	wire `N(`EXEC_LEN*`XLEN)           exec_instr;
 	wire `N(`EXEC_LEN*`XLEN)           exec_pc;
 	wire `N(`EXEC_LEN)                 exec_vld;
+	wire `N(`EXEC_LEN*`MEMB_OFF)       exec_cnt;
 	
 	//connection for alu
-	wire `N(`EXEC_LEN*5)               rs0_sel, rs1_sel;
+	wire `N(`EXEC_LEN*`RGBIT)          rs0_sel, rs1_sel;
 	wire `N(`EXEC_LEN*`XLEN)           rs0_word, rs1_word;
-	wire `N(`EXEC_LEN*5)               rg_sel;
+	wire `N(`EXEC_LEN*`RGBIT)          rg_sel;
 	wire `N(`EXEC_LEN*`XLEN)           rg_data;
 	wire `N(`EXEC_LEN)                 mem_vld;
 	wire `N(`EXEC_LEN*`MEMB_PARA)      mem_para;
@@ -72,38 +75,32 @@ module ssrv_top(
 	wire `N(`XLEN)                     csr_data;
 	
 	//connection for mprf
-	wire `N(5)                         mem_sel;
+	wire `N(`RGBIT)                    mem_sel;
 	wire `N(`XLEN)                     mem_data;
 `ifdef RV32M_SUPPORTED
-    wire `N(5)                         m2_sel;
+    wire `N(`RGBIT)                    m2_sel;
 	wire `N(`XLEN)                     m2_data;
 	wire                               mul_is_busy;
 `endif
+    wire                               direct_reset;
 
 
     instrman u_man(
-	//system signals
     .clk                (    clk                 ),
     .rst                (    rst                 ),
-                   
-    //from top level				   
+   
     .imem_req           (    imem_req            ),
     .imem_addr          (    imem_addr           ),
     .imem_rdata         (    imem_rdata          ),
     .imem_resp          (    imem_resp           ),
-     
-	//from sys_csr
+
     .sysjmp_vld         (    sysjmp_vld          ),
     .sysjmp_pc          (    sysjmp_pc           ),
-	
-	//from alu
     .alujmp_vld         (    alujmp_vld          ),
     .alujmp_pc          (    alujmp_pc           ),
     
-	//from instrbits
-	.buffer_free        (    instr_buf_free      ),	
-					
-    //to instrbits					
+	.buffer_free        (    buffer_free         ),	
+	
     .jump_vld           (    jump_vld            ),
     .jump_pc            (    jump_pc             ),
     .line_vld           (    line_vld            ),
@@ -112,23 +109,18 @@ module ssrv_top(
     );
 
     instrbits u_bits(
-	//system signals
     .clk                (    clk                 ),
     .rst                (    rst                 ),   
     
-    //from instrman
     .jump_vld           (    jump_vld            ),
     .jump_pc            (    jump_pc             ),	
     .line_vld           (    line_vld            ),
     .line_data          (    line_data           ),
     
-	//from schedule
     .core_offset        (    core_offset         ),
-                        
-    //to instrman
-    .buffer_free        (    instr_buf_free      ),						
+
+    .buffer_free        (    buffer_free         ),						
     
-    //to schedule	
     .fetch_instr        (    fetch_instr         ),
     .fetch_pc           (    fetch_pc            ),
     .fetch_vld          (    fetch_vld           )	
@@ -140,7 +132,13 @@ module ssrv_top(
 	//system signals
 	.clk                (    clk                 ),
 	.rst                (    rst                 ),
-	   
+	
+	//from sys_csr
+	.direct_mode        (    direct_mode         ),
+	
+	//from mprf
+	.rf_release         (    rf_release          ),
+  
     //from membuf	
 	.mem_release        (    mem_release         ),
 `ifdef RV32M_SUPPORTED
@@ -153,7 +151,8 @@ module ssrv_top(
 `ifdef REGISTER_EXEC
     .jump_vld           (    jump_vld            ),
 `endif
-	            
+
+    //from instrbits  
     .fetch_instr        (    fetch_instr         ),
     .fetch_pc           (    fetch_pc            ),
 	.fetch_vld          (    fetch_vld           ),
@@ -162,11 +161,14 @@ module ssrv_top(
     .exec_instr         (    exec_instr          ),
     .exec_pc            (    exec_pc             ),
 	.exec_vld           (    exec_vld            ),
+	.exec_cnt           (    exec_cnt            ),
 
 	//to instrbits
     .core_offset        (    core_offset         )	
 	
 	);
+	
+	
 	
 	generate
 	genvar i;
@@ -183,8 +185,8 @@ module ssrv_top(
 			.vld                     (     exec_vld[i]                       ),
 		     
 		    //between mprf  
-		    .rs0_sel                 (     rs0_sel[`IDX(i,5)]                ),
-		    .rs1_sel                 (     rs1_sel[`IDX(i,5)]                ),
+		    .rs0_sel                 (     rs0_sel[`IDX(i,`RGBIT)]           ),
+		    .rs1_sel                 (     rs1_sel[`IDX(i,`RGBIT)]           ),
 		    .rs0_word                (     rs0_word[`IDX(i,`XLEN)]           ),
 		    .rs1_word                (     rs1_word[`IDX(i,`XLEN)]           ),
 		    
@@ -193,7 +195,7 @@ module ssrv_top(
 		    .jump_pc                 (     alujmp_pc                         ),
 		    
      	    //to mprf	
-		    .rg_sel                  (     rg_sel[`IDX(i,5)]                 ),
+		    .rg_sel                  (     rg_sel[`IDX(i,`RGBIT)]            ),
 		    .rg_data                 (     rg_data[`IDX(i,`XLEN)]            ),
 		    
             //to membuf
@@ -217,13 +219,13 @@ module ssrv_top(
 			.vld                     (     exec_vld[i]                       ),
 		     
 		    //between mprf  
-		    .rs0_sel                 (     rs0_sel[`IDX(i,5)]                ),
-		    .rs1_sel                 (     rs1_sel[`IDX(i,5)]                ),
+		    .rs0_sel                 (     rs0_sel[`IDX(i,`RGBIT)]           ),
+		    .rs1_sel                 (     rs1_sel[`IDX(i,`RGBIT)]           ),
 		    .rs0_word                (     rs0_word[`IDX(i,`XLEN)]           ),
 		    .rs1_word                (     rs1_word[`IDX(i,`XLEN)]           ),
 		    
      	    //to mprf	
-		    .rg_sel                  (     rg_sel[`IDX(i,5)]                 ),
+		    .rg_sel                  (     rg_sel[`IDX(i,`RGBIT)]            ),
 		    .rg_data                 (     rg_data[`IDX(i,`XLEN)]            ),
 		    
             //to membuf
@@ -253,6 +255,9 @@ module ssrv_top(
 	.jump_vld           (    sysjmp_vld                           ),
 	.jump_pc            (    sysjmp_pc                            ),
 	
+	.direct_mode        (    direct_mode                          ),
+	.direct_reset       (    direct_reset                         ),
+	
 	.csr_data           (    csr_data                             )
 	
 	
@@ -264,25 +269,31 @@ module ssrv_top(
 	.clk               (    clk                                 ),
 	.rst               (    rst                                 ),
 
-`ifdef RV32M_SUPPORTED
-    //from membuf	                     
+	//from sys_csr
+	.direct_mode       (    direct_mode                         ),
+	
+    //from membuf
+    .mem_release       (    mem_release                         ),	
+`ifdef RV32M_SUPPORTED	                     
 	.mem_sel           (    m2_sel                              ),
 	.mem_data          (    m2_data                             ),
-`else	
-    //from membuf	                     
+`else	                   
 	.mem_sel           (    mem_sel                             ),
 	.mem_data          (    mem_data                            ),
 `endif	
 	
     //from alu	
 	.rg_sel            (    rg_sel                              ),
+	.rg_cnt            (    exec_cnt                            ),
 	.rg_data           (    rg_data                             ),
-	                     
+
     //between alu	                     
 	.rs0_sel           (    rs0_sel                             ),
 	.rs1_sel           (    rs1_sel                             ),
 	.rs0_data          (    rs0_word                            ),
-	.rs1_data          (    rs1_word                            )
+	.rs1_data          (    rs1_word                            ),
+	
+	.rf_release        (    rf_release                          )
 	
 	);
 
@@ -290,20 +301,25 @@ module ssrv_top(
 	//system signals
 	.clk               (    clk                                 ),
 	.rst               (    rst                                 ),
-	                     
+	
+	//from sys_csr
+	.direct_mode       (    direct_mode                         ),
+	.direct_reset      (    direct_reset                        ),
+ 
     //from alu                     
 	.mem_vld           (    mem_vld                             ),
 	.mem_para          (    mem_para                            ),
 	.mem_addr          (    mem_addr                            ),
 	.mem_wdata         (    mem_wdata                           ),
-	                     
+	.mem_pc            (    exec_pc                             ),
+
 	//to schedule                     
 	.mem_release       (    mem_release                         ),
-                         
+
 	//to mprf                     
     .mem_sel           (    mem_sel                             ),
     .mem_data          (    mem_data                            ),
-                     
+
 	//to top level                     
     .dmem_req          (    dmem_req                            ),
     .dmem_cmd          (    dmem_cmd                            ),
@@ -317,19 +333,21 @@ module ssrv_top(
 
 `ifdef RV32M_SUPPORTED
     mul  u_mul(
-	.clk                (    clk                                  ),
-    .rst                (    rst                                  ),		
+	.clk                (   clk                                   ),
+    .rst                (   rst                                   ),		
 	
     //from schedule			
-	.instr              (    exec_instr[`IDX(`EXEC_LEN-1,`XLEN)]  ),
-	.pc                 (    exec_pc[`IDX(`EXEC_LEN-1,`XLEN)]     ),
-	.vld                (    exec_vld[`EXEC_LEN-1]                ),  
+	.instr              (   exec_instr[`IDX(`EXEC_LEN-1,`XLEN)]   ),
+	.pc                 (   exec_pc[`IDX(`EXEC_LEN-1,`XLEN)]      ),
+	.vld                (   exec_vld[`EXEC_LEN-1]                 ), 
+    .cnt                (   exec_cnt[`IDX(`EXEC_LEN-1,`MEMB_OFF)] ),	
 	
 	//from mprf
-    .rs0_word           (    rs0_word[`IDX(`EXEC_LEN-1,`XLEN)]    ),
-    .rs1_word           (    rs1_word[`IDX(`EXEC_LEN-1,`XLEN)]    ),   
+    .rs0_word           (   rs0_word[`IDX(`EXEC_LEN-1,`XLEN)]     ),
+    .rs1_word           (   rs1_word[`IDX(`EXEC_LEN-1,`XLEN)]     ),   
 
-	//to mprf                     
+	//to mprf  
+    .mem_release       (    mem_release                           ),	
     .mem_sel           (    mem_sel                               ),
     .mem_data          (    mem_data                              ),
 

@@ -35,7 +35,7 @@ module instrbits
     //to instrman								
     output                      buffer_free,
     
-    //to instrpre	
+    //to schedule	
     output `N(`FETCH_LEN*`XLEN) fetch_instr,
 	output `N(`FETCH_LEN*`XLEN) fetch_pc,
 	output `N(`FETCH_LEN)       fetch_vld
@@ -45,7 +45,7 @@ module instrbits
     reg `N(`BUF_LEN*`BUS_WID)   buffer;
 	reg `N(`BUF_OFF)            buff_len;
 	reg `N(`XLEN)               buff_pc;
-	
+	reg `N(`FETCH_OFF)          last_offset;
 	reg `N(`BUS_OFF)            line_offset;
 
 	`FFx(line_offset,0)
@@ -57,7 +57,6 @@ module instrbits
  	
     wire `N(`BUS_WID) line_in = line_vld ? (line_data>>(line_offset*`HLEN)) : 0; 
 	
-	reg `N(`FETCH_OFF) last_offset;
 	`FFx(last_offset,0)
 	if ( jump_vld )
 	    last_offset <= 0;

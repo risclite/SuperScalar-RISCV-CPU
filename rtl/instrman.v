@@ -21,29 +21,24 @@ module instrman
 #(
     parameter START_ADDR = 'h200
 )
-(
-	//system signal    
+(   
+	//system signals
     input                           clk,
 	input                           rst,
 
-    //from top level	
+	//top level	
     output                          imem_req,
 	output `N(`XLEN)                imem_addr,
 	input  `N(`BUS_WID)             imem_rdata,
 	input                           imem_resp,
-	
-	//from sys	
+
 	input                           sysjmp_vld,
 	input  `N(`XLEN)                sysjmp_pc,
-	
-	//from alu	
 	input                           alujmp_vld,
 	input  `N(`XLEN)                alujmp_pc,
 	
-	//from instrbits
 	input                           buffer_free,	
 	
-    //to instrbits	
 	output                          jump_vld,
 	output reg `N(`XLEN)            jump_pc,
 	output                          line_vld,
@@ -51,9 +46,11 @@ module instrman
 
 );
 
-    reg            reset_state;
-	reg `N(`XLEN)  pc;
-		
+    reg             reset_state;
+	reg `N(`XLEN)   pc;
+	reg             req_sent;
+	reg             line_requested;	
+	
 	`FFx(reset_state,1'b1)
 	reset_state <= 1'b0;
 
@@ -69,10 +66,8 @@ module instrman
 	jump_pc[0] = 1'b0;
 	end	
 	
-	
 	wire bus_is_ready = imem_resp;	
 	
-	reg  req_sent;
 	`FFx(req_sent,1'b0)
 	if ( ~req_sent|bus_is_ready )
 	    req_sent <= (buffer_free|jump_vld);
@@ -91,7 +86,6 @@ module instrman
 	    pc <= jump_pc;
 	else;
 
-	reg line_requested;
 	`FFx(line_requested,1'b0)
 	if ( imem_req )
 	    line_requested <= 1'b1;
