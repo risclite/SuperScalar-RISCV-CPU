@@ -18,148 +18,157 @@
 
 `include "define.v"
 module mprf(
-    //system signals
     input                                clk,
 	input                                rst,
-	
-	//from sys_csr
-	input                                direct_mode,
-   
-	//from membuf                       
+                    
 	input                                mem_release,
 	input  `N(`RGBIT)                    mem_sel,
 	input  `N(`XLEN)                     mem_data,
-   
-	//from alu/alu_mul                  
-	input  `N(`EXEC_LEN*`RGBIT)          rg_sel,
-	input  `N(`EXEC_LEN*`MEMB_OFF)       rg_cnt,
-	input  `N(`EXEC_LEN*`XLEN)           rg_data,
- 
-	//between alu/alu_mul               
+                
+	input  `N(`EXEC_LEN*`RGBIT)          rd_sel,
+	input  `N(`EXEC_LEN*`MMCMB_OFF)      rd_order,
+	input  `N(`EXEC_LEN*`XLEN)           rd_data,
+               
 	input  `N(`EXEC_LEN*`RGBIT)          rs0_sel,
 	input  `N(`EXEC_LEN*`RGBIT)          rs1_sel,    	
 	output reg `N(`EXEC_LEN*`XLEN)       rs0_data,
 	output reg `N(`EXEC_LEN*`XLEN)       rs1_data,
-	
-	//to schedule
-	output `N(`EXEC_OFF)                 rf_release
+
+	input                                clear_pipeline,
+	output `N(`RFBUF_OFF)                mprf_rf_num
 );
 
-    function `N(`MEMB_OFF) subone(input sub_flag,input `N(`MEMB_OFF) i);
-	begin
-	    subone = sub_flag ? ((i==0) ? 0 : (i-1)) : i;
-	end
-	endfunction
-
-    reg  `N(`XLEN)                  r         [31:1];
-
-	reg  `N(`RFBUF_LEN*`XLEN)       buf_r;
-	reg  `N(`RFBUF_LEN*`MEMB_OFF)   buf_cnt;
-	reg  `N(`RFBUF_LEN*`RGBIT)      buf_sel;
-	reg  `N(`RFBUF_OFF)             buf_len;	
-	wire `N(`RFBUF_LEN*`MEMB_OFF)   buf_count;
+    `include "include_func.v"
 	
-	wire `N(`RFBUF_LEN)             this_flag;	
-	wire `N(`EXEC_OFF)              this_shift `N(`RFBUF_LEN);
-	wire `N(`RFBUF_OFF)             left_shift `N(`RFBUF_LEN+`EXEC_LEN);
-	
-	wire `N(`EXEC_LEN*`XLEN)        chain_this_r   `N(`RFBUF_LEN+1);
-	wire `N(`EXEC_LEN*`RGBIT)       chain_this_sel `N(`RFBUF_LEN+1);
-	wire `N(`EXEC_OFF)              chain_this_len `N(`RFBUF_LEN+1);
-	
-	wire `N(`RFBUF_LEN*`XLEN)       chain_left_r   `N(`RFBUF_LEN+`EXEC_LEN+1);
-	wire `N(`RFBUF_LEN*`MEMB_OFF)   chain_left_cnt `N(`RFBUF_LEN+`EXEC_LEN+1);
-	wire `N(`RFBUF_LEN*`RGBIT)      chain_left_sel `N(`RFBUF_LEN+`EXEC_LEN+1);
-	wire `N(`RFBUF_OFF)             chain_left_len `N(`RFBUF_LEN+`EXEC_LEN+1);
+//---------------------------------------------------------------------------
+//signal defination
+//---------------------------------------------------------------------------
+    reg `N(`XLEN)                       r [31:1];
 
-	assign chain_this_r[0]     = 0;
-	assign chain_this_sel[0]   = 0;
-	assign chain_this_len[0]   = 0;
-	assign chain_left_r[0]     = 0;
-	assign chain_left_cnt[0]   = 0;
-	assign chain_left_sel[0]   = 0;
-	assign chain_left_len[0]   = 0;
-	
-	wire `N(`EXEC_LEN*`MEMB_OFF)    rg_count;
+	wire `N(`EXEC_OFF)                  exec_num         `N(`EXEC_LEN+1);
+	wire `N(`EXEC_LEN*`RGBIT)           chain_in_sel     `N(`EXEC_LEN+1);
+	wire `N(`EXEC_LEN*`MMCMB_OFF)       chain_in_order   `N(`EXEC_LEN+1);
+	wire `N(`EXEC_LEN*`XLEN)            chain_in_data    `N(`EXEC_LEN+1);
 
-    generate
+	wire `N(`EXEC_OFF)                  in_length;
+    wire `N(`EXEC_LEN*`RGBIT)           in_sel;
+	wire `N(`EXEC_LEN*`MMCMB_OFF)       in_order;
+	wire `N(`EXEC_LEN*`XLEN)            in_data;
+
+	reg `N(`RFBUF_OFF)                  rfbuf_length;
+    reg `N(`RFBUF_LEN*`RGBIT)           rfbuf_sel;
+	reg `N(`RFBUF_LEN*`MMCMB_OFF)       rfbuf_order;
+	reg `N(`RFBUF_LEN*`XLEN)            rfbuf_data;
+	
+	wire `N(`WRRG_LEN*`RGBIT)           wrrg_sel;
+	wire `N(`WRRG_LEN*`XLEN)            wrrg_data;
+	
+	wire `N(`RFBUF_OFF)                 wrrf_num         `N(`RFBUF_LEN+1);
+	wire `N(`RFBUF_LEN*`RGBIT)          chain_wrrf_sel   `N(`RFBUF_LEN+1);
+	wire `N(`RFBUF_LEN*`MMCMB_OFF)      chain_wrrf_order `N(`RFBUF_LEN+1);
+	wire `N(`RFBUF_LEN*`XLEN)           chain_wrrf_data  `N(`RFBUF_LEN+1);
+	
+	wire `N(`WRRG_OFF)                  wrrg_num         `N(`RFBUF_LEN+1);
+	wire `N(`WRRG_LEN*`RGBIT)           chain_wrrg_sel   `N(`RFBUF_LEN+1);
+	wire `N(`WRRG_LEN*`XLEN)            chain_wrrg_data  `N(`RFBUF_LEN+1);
+	
+
+
     genvar i;
-	for (i=0;i<`RFBUF_LEN;i=i+1) begin:gen_buf
-	    assign buf_count[`IDX(i,`MEMB_OFF)]      = subone(mem_release,buf_cnt[`IDX(i,`MEMB_OFF)]);
-	
-	    assign this_flag[i]                      = (i<buf_len) & (buf_count[`IDX(i,`MEMB_OFF)]==0) & (buf_sel[`IDX(i,`RGBIT)]!=0) & (chain_this_len[i]<`EXEC_LEN);
-		
-		assign this_shift[i]                     = this_flag[i] ? chain_this_len[i] : `EXEC_LEN;
-		
-		assign chain_this_r[i+1]                 = chain_this_r[i]|( buf_r[`IDX(i,`XLEN)]<<(this_shift[i]*`XLEN) );
-		
-		assign chain_this_sel[i+1]               = chain_this_sel[i]|( buf_sel[`IDX(i,`RGBIT)]<<(this_shift[i]*`RGBIT) );
-		
-		assign chain_this_len[i+1]               = chain_this_len[i] + this_flag[i];
-		
-		assign left_shift[i]                     = ( (i<buf_len) & (~this_flag[i]) ) ?  chain_left_len[i] : `RFBUF_LEN; 		
-		
-		assign chain_left_r[i+1]                 = chain_left_r[i]|( buf_r[`IDX(i,`XLEN)]<<(left_shift[i]*`XLEN) );
-		
-	    assign chain_left_cnt[i+1]               = chain_left_cnt[i]|( buf_count[`IDX(i,`MEMB_OFF)]<<(left_shift[i]*`MEMB_OFF) );
-		
-		assign chain_left_sel[i+1]               = chain_left_sel[i]|( buf_sel[`IDX(i,`RGBIT)]<<(left_shift[i]*`RGBIT) );
-		
-		assign chain_left_len[i+1]               = chain_left_len[i] + ( (i<buf_len) & (~this_flag[i]) );
-	end
-	for (i=0;i<`EXEC_LEN;i=i+1) begin:gen_in
-`ifdef REGISTER_EXEC
-	    assign rg_count[`IDX(i,`MEMB_OFF)]       = subone(mem_release,rg_cnt[`IDX(i,`MEMB_OFF)]);
-`else
-        assign rg_count[`IDX(i,`MEMB_OFF)]       = rg_cnt[`IDX(i,`MEMB_OFF)];
-`endif	    
-    
-	    assign left_shift[`RFBUF_LEN+i]          = (rg_sel[`IDX(i,`RGBIT)]!=0) ? chain_left_len[`RFBUF_LEN+i] : `RFBUF_LEN;
-      
-        assign chain_left_r[`RFBUF_LEN+i+1]      = chain_left_r[`RFBUF_LEN+i]|( rg_data[`IDX(i,`XLEN)]<<(left_shift[`RFBUF_LEN+i]*`XLEN) );
-		
-		assign chain_left_cnt[`RFBUF_LEN+i+1]    = chain_left_cnt[`RFBUF_LEN+i]|( rg_count[`IDX(i,`MEMB_OFF)]<<(left_shift[`RFBUF_LEN+i]*`MEMB_OFF) );
-		
-		assign chain_left_sel[`RFBUF_LEN+i+1]    = chain_left_sel[`RFBUF_LEN+i]|( rg_sel[`IDX(i,`RGBIT)]<<(left_shift[`RFBUF_LEN+i]*`RGBIT) );
-		
-		assign chain_left_len[`RFBUF_LEN+i+1]    = chain_left_len[`RFBUF_LEN+i] + (rg_sel[`IDX(i,`RGBIT)]!=0);
-	end
-    endgenerate	
-	
-	wire `N(`EXEC_LEN*`XLEN)        this_data    = direct_mode ? rg_data : chain_this_r[`RFBUF_LEN];
-	
-	wire `N(`EXEC_LEN*`RGBIT)       this_sel     = direct_mode ? rg_sel  : chain_this_sel[`RFBUF_LEN];
-	
-	assign rf_release =  chain_this_len[`RFBUF_LEN];	
-	
-    `FFx(buf_r,0)
-	if ( ~direct_mode )
-	    buf_r <= chain_left_r[`RFBUF_LEN+`EXEC_LEN];
-	else;
-	
-	`FFx(buf_cnt,0)
-	if ( ~direct_mode )
-	    buf_cnt <= chain_left_cnt[`RFBUF_LEN+`EXEC_LEN];
-	else;
 
-	`FFx(buf_sel,0)
-	if ( ~direct_mode )
-	    buf_sel <= chain_left_sel[`RFBUF_LEN+`EXEC_LEN];
-	else;
+//---------------------------------------------------------------------------
+//statements area
+//---------------------------------------------------------------------------	
 
-	`FFx(buf_len,0)
-	if ( ~direct_mode )
-	    buf_len <= chain_left_len[`RFBUF_LEN+`EXEC_LEN];
-	else;	
+    assign exec_num[0]       = 0;
+	assign chain_in_sel[0]   = 0;
+	assign chain_in_order[0] = 0;
+	assign chain_in_data[0]  = 0;
+
+    generate 
+	for (i=0;i<`EXEC_LEN;i=i+1) begin:gen_exec
+	    wire `N(`EXEC_OFF)  go_exec = (rd_sel[`IDX(i,`RGBIT)]!=0) ? exec_num[i] : `EXEC_LEN;
+        
+		assign exec_num[i+1] = (rd_sel[`IDX(i,`RGBIT)]!=0) ? ( exec_num[i]+1'b1 ) : exec_num[i];		
+		assign chain_in_sel[i+1] = chain_in_sel[i]|( rd_sel[`IDX(i,`RGBIT)]<<(go_exec*`RGBIT) );
+		assign chain_in_order[i+1] = chain_in_order[i]|( rd_order[`IDX(i,`MMCMB_OFF)]<<(go_exec*`MMCMB_OFF) );
+		assign chain_in_data[i+1]  = chain_in_data[i]|( rd_data[`IDX(i,`XLEN)]<<(go_exec*`XLEN) );
+    end
+    endgenerate
+	
+	assign in_length = exec_num[`EXEC_LEN];
+	assign in_sel = chain_in_sel[`EXEC_LEN];
+	assign in_order = chain_in_order[`EXEC_LEN];
+	assign in_data = chain_in_data[`EXEC_LEN];
 	
 	
+	assign wrrf_num[0]                  = 0;
+	assign chain_wrrf_sel[0]            = 0;
+	assign chain_wrrf_order[0]          = 0;
+	assign chain_wrrf_data[0]           = 0;
+	assign wrrg_num[0]                  = 0;
+	assign chain_wrrg_sel[0]            = 0;
+	assign chain_wrrg_data[0]           = 0;
+
+    generate 
+	for (i=0;i<`RFBUF_LEN;i=i+1) begin:gen_main
+		
+		wire                buffer  = i<rfbuf_length;
+		wire `N(`RFBUF_OFF) count   = buffer ? i : ( i-rfbuf_length );
+		wire                fetch   = (i>=rfbuf_length) & (count<in_length);
+		wire `N(`RGBIT)     sel     = buffer ? ( rfbuf_sel>>(count*`RGBIT) ) : ( in_sel>>(count*`RGBIT) );
+		wire `N(`MMCMB_OFF) order_i = buffer ? ( rfbuf_order>>(count*`MMCMB_OFF) ) : ( in_order>>(count*`MMCMB_OFF) );
+        wire `N(`MMCMB_OFF) order   = get_order(order_i,mem_release);
+        wire `N(`XLEN)      data    = buffer ? ( rfbuf_data>>(count*`XLEN) ) : ( in_data>>(count*`XLEN) );		
+		
+		wire   go_wrrg = buffer & (order==0) & (wrrg_num[i]<`WRRG_LEN); 
+	
+        wire   go_wrrf = ( buffer & ( ( (order==0) & (wrrg_num[i]==`WRRG_LEN) )|( (order!=0) & ~clear_pipeline ) ) )|( fetch & ( ~clear_pipeline|(order==0) ) );
+
+		assign wrrf_num[i+1] = go_wrrf ? ( wrrf_num[i] + 1'b1 ) : wrrf_num[i];
+		
+		wire `N(`RFBUF_OFF) wrrf_shift    = go_wrrf ? wrrf_num[i] : `RFBUF_LEN;
+		
+		assign chain_wrrf_sel[i+1] = chain_wrrf_sel[i]|(sel<<(wrrf_shift*`RGBIT));
+		
+		assign chain_wrrf_order[i+1] = chain_wrrf_order[i]|(order<<(wrrf_shift*`MMCMB_OFF));
+		
+		assign chain_wrrf_data[i+1] = chain_wrrf_data[i]|(data<<(wrrf_shift*`XLEN));
+		
+		assign wrrg_num[i+1] = go_wrrg ? ( wrrg_num[i] + 1'b1  ) : wrrg_num[i];
+		
+		wire `N(`WRRG_OFF) wrrg_shift = go_wrrg ? wrrg_num[i] : `WRRG_LEN;
+		
+		assign chain_wrrg_sel[i+1] = chain_wrrg_sel[i]|(sel<<(wrrg_shift*`RGBIT));
+		
+		assign chain_wrrg_data[i+1] = chain_wrrg_data[i]|(data<<(wrrg_shift*`XLEN));
+	
+	end
+	endgenerate
+
+	`FFx(rfbuf_length,0)
+	rfbuf_length <= wrrf_num[`RFBUF_LEN];
+
+    `FFx(rfbuf_sel,0)
+	rfbuf_sel <= chain_wrrf_sel[`RFBUF_LEN];
+	    
+	`FFx(rfbuf_order,0)
+	rfbuf_order <= chain_wrrf_order[`RFBUF_LEN];
+	    
+	`FFx(rfbuf_data,0)
+	rfbuf_data <= chain_wrrf_data[`RFBUF_LEN];
+	
+    assign wrrg_sel = chain_wrrg_sel[`RFBUF_LEN];
+
+	assign wrrg_data = chain_wrrg_data[`RFBUF_LEN];
+
 	generate
     for (i=1;i<=31;i=i+1) begin:gen_rf
-        `FFx(r[i],0) begin:u_r
+        `FFx(r[i],0) begin:ff_r
 		    integer n;
-			for(n=0;n<`EXEC_LEN;n=n+1) begin
-			    if (i==this_sel[`IDX(n,`RGBIT)])
-				    r[i] <= this_data[`IDX(n,`XLEN)];
+			for(n=0;n<`WRRG_LEN;n=n+1) begin
+			    if (i==wrrg_sel[`IDX(n,`RGBIT)])
+				    r[i] <= wrrg_data[`IDX(n,`XLEN)];
 			end
             if ( i==mem_sel )
 			    r[i] <= mem_data;			
@@ -171,8 +180,8 @@ module mprf(
 		    integer n;
             rs0_data[`IDX(i,`XLEN)] = (rs0_sel[`IDX(i,`RGBIT)]==0) ? 0 : r[rs0_sel[`IDX(i,`RGBIT)]];
 			for (n=0;n<`RFBUF_LEN;n=n+1) begin
-			    if ( ( rs0_sel[`IDX(i,`RGBIT)]==buf_sel[`IDX(n,`RGBIT)] ) & (n<buf_len) )
-				    rs0_data[`IDX(i,`XLEN)] = buf_r[`IDX(n,`XLEN)];
+			    if ( ( rs0_sel[`IDX(i,`RGBIT)]==rfbuf_sel[`IDX(n,`RGBIT)] ) & (n<rfbuf_length) )
+				    rs0_data[`IDX(i,`XLEN)] = rfbuf_data[`IDX(n,`XLEN)];
 			end	
         end		
 
@@ -180,11 +189,13 @@ module mprf(
 		    integer n;
             rs1_data[`IDX(i,`XLEN)] = (rs1_sel[`IDX(i,`RGBIT)]==0) ? 0 : r[rs1_sel[`IDX(i,`RGBIT)]];
 			for (n=0;n<`RFBUF_LEN;n=n+1) begin
-			    if ( ( rs1_sel[`IDX(i,`RGBIT)]==buf_sel[`IDX(n,`RGBIT)] ) & (n<buf_len) )
-				    rs1_data[`IDX(i,`XLEN)] = buf_r[`IDX(n,`XLEN)];
+			    if ( ( rs1_sel[`IDX(i,`RGBIT)]==rfbuf_sel[`IDX(n,`RGBIT)] ) & (n<rfbuf_length) )
+				    rs1_data[`IDX(i,`XLEN)] = rfbuf_data[`IDX(n,`XLEN)];
 			end	
         end	
 	end
-	endgenerate
+	endgenerate	
+
+    assign mprf_rf_num = rfbuf_length;
 	
 endmodule

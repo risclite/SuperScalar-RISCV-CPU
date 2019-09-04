@@ -144,14 +144,14 @@ always_ff @(posedge clk) begin
     if (test_running) begin
         rst_init <= 1'b0;
 `ifdef USE_SSRV
-        if (tb_ssrv.u_ssrv.jump_vld & (tb_ssrv.u_ssrv.jump_pc==SCR1_EXIT_ADDR) & ~rst_init & &rst_cnt) begin
+        if (tb_ssrv.u_ssrv.jump_vld & (tb_ssrv.u_ssrv.jump_pc==SCR1_EXIT_ADDR) & (tb_ssrv.u_ssrv.i_mprf.rfbuf_length==0) & ~rst_init & &rst_cnt) begin
 `else
         if ((i_top.i_core_top.i_pipe_top.curr_pc == SCR1_EXIT_ADDR) & ~rst_init & &rst_cnt) begin
 `endif
             bit test_pass;
             test_running <= 1'b0;
 `ifdef USE_SSRV
-            test_pass = tb_ssrv.u_ssrv.u_rf.r[10]==0;
+            test_pass = tb_ssrv.u_ssrv.i_mprf.r[10]==0;
 `else
             test_pass = (i_top.i_core_top.i_pipe_top.i_pipe_mprf.mprf_int[10] == 0);
 `endif			

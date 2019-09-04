@@ -18,35 +18,29 @@
 
 `include "define.v"
 module sys_csr(
-    //system signals
     input                                clk,
 	input                                rst,
+	
+    input                                sys_vld,
+    input  `N(`XLEN)                     sys_instr,
+	input  `N(`XLEN)                     sys_pc,
+    input  `N(`FETCH_PARA_LEN-`EXEC_PARA_LEN-3) sys_extra_para,
+    input  `N(`XLEN)                     csr_rs,
+	output `N(`XLEN)                     csr_data,
+	
+	input                                dmem_exception,
+	input `N(`XLEN)                      int_pc,
+	
+	output                               clear_pipeline,
 
-	//from schedule
-	input `N(`XLEN)                      instr,	
-	input `N(`XLEN)                      pc,
-	input                                vld,
-	
-	//from mprf
-	input `N(`XLEN)                      rs0_word,
-	input `N(`XLEN)                      rs1_word,
-	
 	output                               jump_vld,
-	output reg `N(`XLEN)                 jump_pc,
+	output reg `N(`XLEN)                 jump_pc
 	
-	output                               direct_mode,
-	output                               direct_reset,
-	
-	output `N(`XLEN)                     csr_data
-	
-
 );
 
 	//csr function
 	
-	wire instr_is_csr = vld & (instr[1:0]==2'b11) & (instr[6:2]==5'b11100) & (instr[14:12]!=3'b0);
-	
-	wire `N(12) csr_addr = instr[31:20];
+	wire `N(12) csr_addr = sys_instr[31:20];
 	
 	localparam ADDR_MHARTID = 12'hf14,
 	           ADDR_MTVEC   = 12'h305,
@@ -64,28 +58,29 @@ module sys_csr(
     reg `N(`XLEN) csr_out;	
 	reg `N(`XLEN) csr_in;
 	
-	wire `N(3)  csr_func = instr[14:12];
+	wire csr_vld = sys_vld & (sys_extra_para==0); 
+	wire `N(3)  csr_func = sys_instr[14:12];
 	
 	`COMB
 	case(csr_func)
-	3'b001 : csr_in = rs0_word;
-	3'b010 : csr_in = rs0_word|csr_out;
-	3'b011 : csr_in = (~rs0_word)&csr_out;
-	3'b101 : csr_in = instr[19:15];
-	3'b110 : csr_in = instr[19:15]|csr_out;
-	3'b111 : csr_in = (~instr[19:15])&csr_out;
+	3'b001 : csr_in = csr_rs;
+	3'b010 : csr_in = csr_rs|csr_out;
+	3'b011 : csr_in = (~csr_rs)&csr_out;
+	3'b101 : csr_in = sys_instr[19:15];
+	3'b110 : csr_in = sys_instr[19:15]|csr_out;
+	3'b111 : csr_in = (~sys_instr[19:15])&csr_out;
 	default : csr_in = csr_out;
 	endcase
 	
 	reg `N(`XLEN) data_mtvec;
 	`FFx(data_mtvec,0)
-	if ( instr_is_csr & (csr_addr==ADDR_MTVEC) )
+	if ( csr_vld & (csr_addr==ADDR_MTVEC) )
 	    data_mtvec <= csr_in;
 	else;
 	
 	reg `N(`XLEN) data_mepc;
 	`FFx(data_mepc,0)
-	if ( instr_is_csr & (csr_addr==ADDR_MEPC) )
+	if ( csr_vld & (csr_addr==ADDR_MEPC) )
 	    data_mepc <= csr_in;
 	else;
 
@@ -126,20 +121,17 @@ module sys_csr(
 	
 	
 	assign csr_data = csr_out;
+	
+	
 
-	wire instr_is_ret    = vld & (instr==32'b0000000_00010_00000_000_00000_1110011)|(instr==32'b0001000_00010_00000_000_00000_1110011)|(instr==32'b0011000_00010_00000_000_00000_1110011);
-	wire instr_is_ecall  = vld & (instr==32'b0000000_00000_00000_000_00000_1110011);
-	wire instr_is_fencei = vld & (instr==32'b0000000_00000_00000_001_00000_0001111);
+	wire instr_is_ret    = sys_vld & ((sys_extra_para>>3)==0) & (sys_instr[31:0]==32'b0000000_00010_00000_000_00000_1110011)|(sys_instr[31:0]==32'b0001000_00010_00000_000_00000_1110011)|(sys_instr[31:0]==32'b0011000_00010_00000_000_00000_1110011);
+	wire instr_is_ecall  = sys_vld & ((sys_extra_para>>3)==0) & (sys_instr[31:0]==32'b0000000_00000_00000_000_00000_1110011);
+	wire instr_is_fencei = sys_vld & ((sys_extra_para>>3)==0) & (sys_instr[31:0]==32'b0000000_00000_00000_001_00000_0001111);
+	
+	assign clear_pipeline = 1'b0;
 	
 	assign jump_vld = (instr_is_ret|instr_is_ecall|instr_is_fencei);
 	
-`ifdef DIRECT_MODE	
-	assign direct_mode = 1'b1;
-`else
-    assign direct_mode = 1'b0;
-`endif
-	
-	assign direct_reset = 1'b0;
 
     `COMB
 	if ( instr_is_ret )
@@ -147,7 +139,7 @@ module sys_csr(
 	else if ( instr_is_ecall )
 	    jump_pc = data_mtvec;
 	else if ( instr_is_fencei )
-	    jump_pc = pc + 4;
+	    jump_pc = sys_pc + 4;
 	else
 	    jump_pc = 0;
 	

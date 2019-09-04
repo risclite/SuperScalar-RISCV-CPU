@@ -18,175 +18,273 @@
 
 `include "define.v"
 module membuf(
-    //system signals
     input                                    clk,
 	input                                    rst,
-	
-	//from sys_csr
-	input                                    direct_mode,
-	input                                    direct_reset,
-	
-	//from alu/alu_mul
+
 	input  `N(`EXEC_LEN)                     mem_vld,
-	input  `N(`EXEC_LEN*`MEMB_PARA)          mem_para,
+	input  `N(`EXEC_LEN*`MMBUF_PARA_LEN)     mem_para,
 	input  `N(`EXEC_LEN*`XLEN)               mem_addr,
 	input  `N(`EXEC_LEN*`XLEN)               mem_wdata,
 	input  `N(`EXEC_LEN*`XLEN)               mem_pc,
 	
-	//to schedule
     output                                   mem_release,
+	output `N(`RGLEN)                        membuf_rd_list,
+	output `N(`MMBUF_OFF)                    membuf_mem_num,
 
-	//to mprf
-    output     `N(5)                         mem_sel,
+    output `N(`RGBIT)                        mem_sel,
     output reg `N(`XLEN)                     mem_data,	
 
-	//to top level
-    output  reg                              dmem_req,
+	output                                   sys_vld,
+	output `N(`XLEN)                         sys_instr,
+	output `N(`XLEN)                         sys_pc,
+	output `N(`XLEN)                         csr_rs,
+	input  `N(`XLEN)                         csr_data,
+	
+	input  `N(`MULBUF_OFF)                   mul_this_order,
+	output                                   mul_vld,
+	output `N(3)                             mul_para,
+	output `N(`XLEN)                         mul_rs0,
+	output `N(`XLEN)                         mul_rs1,
+	output                                   mul_accept,
+	input                                    mul_in_vld,
+	input  `N(`XLEN)                         mul_in_data,
+
+	input                                    clear_pipeline,	
+	input   `N(`XLEN)                        schedule_int_pc,
+    output  `N(`XLEN)                        membuf_int_pc,
+    output                                   dmem_exception,	
+
+    output                                   dmem_req,
 	output                                   dmem_cmd,
 	output `N(2)                             dmem_width,
 	output reg `N(`XLEN)                     dmem_addr,
 	output `N(`XLEN)                         dmem_wdata,
 	input  `N(`XLEN)                         dmem_rdata,
-	input                                    dmem_resp
+	input                                    dmem_resp,
+	input                                    dmem_err
 
 );
-  
-	reg  `N(`MEMB_LEN*`MEMB_PARA)            buff_para;
-	reg  `N(`MEMB_LEN*`XLEN)                 buff_addr;
-	reg  `N(`MEMB_LEN*`XLEN)                 buff_wdata;
-	reg  `N(`MEMB_LEN*`XLEN)                 buff_pc;	
-	reg  `N(`MEMB_OFF)                       buff_len;
-    
-	wire                                     this_op;
-	
-    wire `N(`EXEC_OFF)                       chain_len   `N(`EXEC_LEN+1);
-    wire `N(`EXEC_LEN*`MEMB_PARA)            chain_para  `N(`EXEC_LEN+1);
-	wire `N(`EXEC_LEN*`XLEN)                 chain_addr  `N(`EXEC_LEN+1);
-	wire `N(`EXEC_LEN*`XLEN)                 chain_wdata `N(`EXEC_LEN+1);
-	wire `N(`EXEC_LEN*`XLEN)                 chain_pc    `N(`EXEC_LEN+1);
-    wire `N(`EXEC_OFF)                       chain_shift `N(`EXEC_LEN);
-	
-	reg                                      req_sent;	
-	
-    assign chain_len[0]        = 0;
-    assign chain_para[0]       = 0;
-	assign chain_addr[0]       = 0;
-	assign chain_wdata[0]      = 0;
-	assign chain_pc[0]         = 0;
 
-    generate
+
+//---------------------------------------------------------------------------
+//signal defination
+//---------------------------------------------------------------------------
+    reg  `N(`MMBUF_OFF)                      mmbuf_length;
+	reg  `N(`MMBUF_LEN*`MMBUF_PARA_LEN)      mmbuf_para;
+	reg  `N(`MMBUF_LEN*`XLEN)                mmbuf_addr;
+	reg  `N(`MMBUF_LEN*`XLEN)                mmbuf_wdata;
+	reg  `N(`MMBUF_LEN*`XLEN)                mmbuf_pc;
+	reg  `N(`RGLEN)                          membuf_rd_list_ch0,membuf_rd_list_ch1;
+
+    wire `N(`EXEC_OFF)                       in_length;
+	wire `N(`EXEC_LEN*`MMBUF_PARA_LEN)       in_para;
+	wire `N(`EXEC_LEN*`XLEN)                 in_addr,in_wdata,in_pc;
+
+    wire `N(`EXEC_OFF)                       exec_num        `N(`EXEC_LEN+1);
+	wire `N(`EXEC_LEN*`MMBUF_PARA_LEN)       chain_in_para   `N(`EXEC_LEN+1);
+	wire `N(`EXEC_LEN*`XLEN)                 chain_in_addr   `N(`EXEC_LEN+1);
+	wire `N(`EXEC_LEN*`XLEN)                 chain_in_wdata  `N(`EXEC_LEN+1);
+	wire `N(`EXEC_LEN*`XLEN)                 chain_in_pc     `N(`EXEC_LEN+1);	
+
+	wire `N(`MMBUF_OFF)                      mul_num         `N(`MMBUF_LEN+1);
+	wire `N(`MMBUF_OFF)                      mul_order       `N(`MMBUF_LEN+1);
+	wire `N(`RGLEN)                          chain_rd_list0  `N(`MMBUF_LEN+1);
+	wire `N(`RGLEN)                          chain_rd_list1  `N(`MMBUF_LEN+1);
+	wire `N(`RGLEN)                          chain_rd_list2  `N(`MMBUF_LEN+1);	
+
+	reg                                      command_release;
+    reg                                      request_go;
+    reg                                      req_sent;	
+
     genvar i;
-    for (i=0;i<`EXEC_LEN;i=i+1) begin:gen_exec
-    	assign chain_len[i+1]   = chain_len[i] + mem_vld[i];
+//---------------------------------------------------------------------------
+//statements area
+//---------------------------------------------------------------------------
 
-    	assign chain_shift[i]   = mem_vld[i] ? chain_len[i] : `EXEC_LEN;
+    //exec processing
 
-    	assign chain_para[i+1]  = chain_para[i]|(mem_para[`IDX(i,`MEMB_PARA)]<<(chain_shift[i]*`MEMB_PARA));
+    assign exec_num[0]          = 0;
+    assign chain_in_para[0]     = 0;
+	assign chain_in_addr[0]     = 0;
+	assign chain_in_wdata[0]    = 0;
+	assign chain_in_pc[0]       = 0;
+	
+	generate 
+	for (i=0;i<`EXEC_LEN;i=i+1) begin:gen_exec
+	    wire `N(`EXEC_OFF) go_exec = mem_vld[i] ? exec_num[i] : `EXEC_LEN;
 		
-		assign chain_addr[i+1]  = chain_addr[i]|(mem_addr[`IDX(i,`XLEN)]<<(chain_shift[i]*`XLEN));
-		
-		assign chain_wdata[i+1] = chain_wdata[i]|(mem_wdata[`IDX(i,`XLEN)]<<(chain_shift[i]*`XLEN));
-		
-		assign chain_pc[i+1]    = chain_pc[i]|(mem_pc[`IDX(i,`XLEN)]<<(chain_shift[i]*`XLEN));
-    end	
-    endgenerate
-	
-	wire `N((`MEMB_LEN+1)*`MEMB_PARA) all_para  =  direct_mode ? chain_para[`EXEC_LEN]  : ( buff_para|(chain_para[`EXEC_LEN]<<(buff_len*`MEMB_PARA)) );
-	
-    wire `N((`MEMB_LEN+1)*`XLEN) all_addr       =  direct_mode ? chain_addr[`EXEC_LEN]  : ( buff_addr|(chain_addr[`EXEC_LEN]<<(buff_len*`XLEN)) );
-
-    wire `N((`MEMB_LEN+1)*`XLEN) all_wdata      =  direct_mode ? chain_wdata[`EXEC_LEN] : ( buff_wdata|(chain_wdata[`EXEC_LEN]<<(buff_len*`XLEN)) );
-
-    wire `N((`MEMB_LEN+1)*`XLEN) all_pc         =  direct_mode ? chain_pc[`EXEC_LEN]    : ( buff_pc|(chain_pc[`EXEC_LEN]<<(buff_len*`XLEN)) );
-	
-	`FFx(buff_para,0)
-	if ( ~direct_mode )
-	    buff_para <= all_para>>(this_op*`MEMB_PARA);
-		
-	`FFx(buff_addr,0)
-	if ( ~direct_mode )
-	    buff_addr <= all_addr>>(this_op*`XLEN);
-	else;
-
-    `FFx(buff_wdata,0)
-	if ( ~direct_mode )
-	    buff_wdata <= all_wdata>>(this_op*`XLEN);
-	else;
-	
-	`FFx(buff_pc,0)
-	if ( ~direct_mode )
-	    buff_pc <= all_pc>>(this_op*`XLEN);
-	else;
-	
-	wire `N(`MEMB_OFF+1) mem_len =  buff_len + chain_len[`EXEC_LEN];
-	
-	`FFx(buff_len,0)
-	if ( ~direct_mode )
-	    buff_len <= mem_len - this_op;
-	else;
-	
-	wire  bus_is_ready = dmem_resp;	
-	
-	`FFx(req_sent,1'b0)
-	if ( direct_reset )
-	    req_sent <= 1'b0;
-	else if ( ~req_sent )
-	    req_sent <= direct_mode ? (|mem_vld) : ((buff_len!=0)|(|mem_vld));
-	else if ( bus_is_ready )
-	    req_sent <= direct_mode ? 1'b0 : (mem_len>=2);
-	else;
-	
-	assign this_op = req_sent & bus_is_ready;
-	
-	`COMB 
-	if ( ~req_sent )
-	    dmem_req = direct_mode ? (|mem_vld) : ((buff_len!=0)|(|mem_vld));
-	else if ( bus_is_ready )
-	    dmem_req = direct_mode ? 1'b0 : (mem_len>=2);
-	else
-	    dmem_req = 0;
-    
-	assign dmem_cmd                 = (req_sent & bus_is_ready) ? all_para[`MEMB_PARA] : all_para[0];
-   
-	assign dmem_width               = (req_sent & bus_is_ready) ? all_para[`MEMB_PARA+1+:2] : all_para[1+:2];
-    
-	`COMB begin
-	    if ( req_sent & bus_is_ready ) begin
-		    dmem_addr[2+:(`XLEN-2)] = all_addr[`XLEN+2+:(`XLEN-2)];
-			dmem_addr[1:0]          = (dmem_width==2'b00) ? all_addr[`XLEN+:2] : ( (dmem_width==2'b01) ? {all_addr[`XLEN+1],1'b0} : 2'b00 ); 
-		end else begin
-		    dmem_addr[2+:(`XLEN-2)] = all_addr[2+:(`XLEN-2)];
-			dmem_addr[1:0]          = (dmem_width==2'b00) ? all_addr[0+:2] : ( (dmem_width==2'b01) ? {all_addr[1],1'b0} : 2'b00 ); 		
-		end
+		assign exec_num[i+1]       = mem_vld[i] ? ( exec_num[i] + 1'b1 ) : exec_num[i];
+		assign chain_in_para[i+1]  = chain_in_para[i]|( mem_para[`IDX(i,`MMBUF_PARA_LEN)]<<(go_exec*`MMBUF_PARA_LEN) );
+		assign chain_in_addr[i+1]  = chain_in_addr[i]|( mem_addr[`IDX(i,`XLEN)]<<(go_exec*`XLEN) );
+		assign chain_in_wdata[i+1] = chain_in_wdata[i]|( mem_wdata[`IDX(i,`XLEN)]<<(go_exec*`XLEN) );
+		assign chain_in_pc[i+1]    = chain_in_pc[i]|( mem_pc[`IDX(i,`XLEN)]<<(go_exec*`XLEN) );
 	end
-   
-	assign dmem_wdata               = (req_sent & bus_is_ready) ? all_wdata[`IDX(1,`XLEN)] : all_wdata[`IDX(0,`XLEN)];
+	endgenerate
+	
+	//mul processing
+	
+	assign in_length = exec_num[`EXEC_LEN];
+	assign in_para   = chain_in_para[`EXEC_LEN];
+	assign in_addr   = chain_in_addr[`EXEC_LEN];
+	assign in_wdata  = chain_in_wdata[`EXEC_LEN];
+	assign in_pc     = chain_in_pc[`EXEC_LEN];
+	
+	wire `N(`MMBUF_OFF)                       combine_length = mmbuf_length + in_length;
+	wire `N(`MMBUF_LEN*`MMBUF_PARA_LEN)       combine_para   = mmbuf_para|( in_para<<(mmbuf_length*`MMBUF_PARA_LEN) );
+	wire `N(`MMBUF_LEN*`XLEN)                 combine_addr   = mmbuf_addr|( in_addr<<(mmbuf_length*`XLEN) );
+	wire `N(`MMBUF_LEN*`XLEN)                 combine_wdata  = mmbuf_wdata|( in_wdata<<(mmbuf_length*`XLEN) );
+	wire `N(`MMBUF_LEN*`XLEN)                 combine_pc     = mmbuf_pc|( in_pc<<(mmbuf_length*`XLEN) );
+	
+	assign mul_num[0]            = 0;
+	assign mul_order[0]          = `MMBUF_LEN;
+	assign chain_rd_list0[0]     = 0;
+	assign chain_rd_list1[0]     = 0;
+	assign chain_rd_list2[0]     = 0;
+	
+    generate
+	for (i=0;i<`MMBUF_LEN;i=i+1) begin:gen_mmbuf		
+		wire `N(`MMBUF_PARA_LEN)    para = combine_para>>(i*`MMBUF_PARA_LEN);
+		
+		wire                        mul  = ( para>>(`MMBUF_PARA_LEN-2) )==2'b10;
+		
+		wire `N(`RGBIT)             rd   = para[3] ? 0 : (para>>4);
+		
+		assign mul_num[i+1]              = mul_num[i] + mul;
+		
+		assign mul_order[i+1]            = ( (mul_num[i]==mul_this_order) & mul ) ? i : mul_order[i];
+	
+	    assign chain_rd_list0[i+1]       = chain_rd_list0[i]|( (1'b1<<rd)>>1 );
+		
+		assign chain_rd_list1[i+1]       = (i==0) ? chain_rd_list1[i] : ( chain_rd_list1[i]|( (1'b1<<rd)>>1 ) );
+		
+		assign chain_rd_list2[i+1]       = ((i==0)|(i==1)) ? chain_rd_list2[i] : ( chain_rd_list2[i]|( (1'b1<<rd)>>1 ) );		
+	end
+	endgenerate
+	
+	wire active_vld = ( combine_length!=0 );	
+	wire `N(`MMBUF_PARA_LEN) active_para = combine_para;
+	wire `N(`XLEN) active_addr = combine_addr;
+	wire `N(`XLEN) active_wdata = combine_wdata;
+	wire `N(`XLEN) active_pc = combine_pc;
+	
+	wire alter_vld =  ( combine_length!=0 ) &  ( combine_length!=1 );
+	wire `N(`MMBUF_PARA_LEN) alter_para = combine_para>>`MMBUF_PARA_LEN;
+	wire `N(`XLEN) alter_addr = combine_addr>>`XLEN;
+	wire `N(`XLEN) alter_wdata = combine_wdata>>`XLEN;
+	wire `N(`XLEN) alter_pc = combine_pc>>`XLEN;    	
+	
+	
+    assign mul_vld = mul_order[`MMBUF_LEN]!=`MMBUF_LEN;
+	
+	assign mul_para = combine_para>>(mul_order[`MMBUF_LEN]*`MMBUF_PARA_LEN);
+	
+	assign mul_rs0  = combine_addr>>(mul_order[`MMBUF_LEN]*`XLEN);
+	
+	assign mul_rs1  = combine_wdata>>(mul_order[`MMBUF_LEN]*`XLEN);
+	
+	assign mul_accept = active_vld & ( ( active_para>>(`MMBUF_PARA_LEN-2) )==2'b10 ) & mul_in_vld;
 
-    reg `N(`MEMB_PARA) req_para;
-	`FFx(req_para,0)
-	if ( dmem_req )
-	    if ( req_sent & bus_is_ready & ~direct_mode & (mem_len>=2) )
-		    req_para <= all_para[`IDX(1,`MEMB_PARA)];
+    //csr processing	
+    assign sys_vld = active_vld & ( ( active_para>>(`MMBUF_PARA_LEN-2) )==2'b11 );
+	
+	assign sys_instr = active_wdata;	
+	
+	assign sys_pc = active_pc;
+	
+	assign csr_rs = active_addr;
+	
+    //mem processing		
+	
+	always @* 
+	if ( active_vld & ~clear_pipeline )
+	    if ( active_para[`MMBUF_PARA_LEN-1] )
+		    command_release = active_para[`MMBUF_PARA_LEN-2] ? 1'b1 : mul_in_vld;
 		else
-		    req_para <= all_para[`IDX(0,`MEMB_PARA)];
+		    command_release = req_sent & dmem_resp & ~dmem_err;
+	else
+	    command_release = 1'b0;
+		
+	assign mem_release = command_release;	
+
+	always @*
+	if ( active_vld )
+	    if ( active_para[`MMBUF_PARA_LEN-1] )
+		    request_go = ( active_para[`MMBUF_PARA_LEN-2] ? 1'b1 : mul_in_vld ) & ( alter_vld & ~alter_para[`MMBUF_PARA_LEN-1] );
+		else
+		    request_go = ~req_sent|( alter_vld & ~alter_para[`MMBUF_PARA_LEN-1] );
+	else 
+	    request_go = 1'b0;
+
+    wire alter_select = active_para[`MMBUF_PARA_LEN-1]|req_sent;
+    	
+	`FFx(req_sent,1'b0)
+	if ( ~req_sent|dmem_resp )
+	    req_sent <= request_go;
 	else;
 
-	wire load_vld                   = ~req_para[0];
+    assign dmem_req = request_go & (~req_sent|dmem_resp);
 	
-	wire `N(3)  load_para           = req_para[3:1];
+	assign dmem_cmd = alter_select ? alter_para[3] : active_para[3];
+
+    assign dmem_width = alter_select ? alter_para[1:0] : active_para[1:0];
 	
-	wire `N(5)  load_rg             = req_para[8:4];
+	always @* begin
+	    if ( alter_select ) begin
+		    dmem_addr[2+:(`XLEN-2)] = alter_addr[2+:(`XLEN-2)];
+			dmem_addr[1:0]          = (dmem_width==2'b00) ? alter_addr[1:0] : ( (dmem_width==2'b01) ? {alter_addr[1],1'b0} : 2'b00 ); 
+		end else begin
+		    dmem_addr[2+:(`XLEN-2)] = active_addr[2+:(`XLEN-2)];
+			dmem_addr[1:0]          = (dmem_width==2'b00) ? active_addr[1:0] : ( (dmem_width==2'b01) ? {active_addr[1],1'b0} : 2'b00 ); 		
+		end
+	end	
+
+	assign dmem_wdata               = alter_select ? alter_wdata : active_wdata;
+
 	
-	assign mem_sel                  = (this_op & load_vld) ? load_rg : 5'h0;
+	wire mem_to_mprf = active_vld & ( active_para[`MMBUF_PARA_LEN-1] ? ( active_para[`MMBUF_PARA_LEN-2] ? 1'b1 : mul_in_vld ) : ( req_sent & dmem_resp & ~dmem_err & ~active_para[3] ) );
+	
+	assign mem_sel = mem_to_mprf ? active_para[8:4] : 5'b0;
 	
 	`COMB
-	if ( load_para[2] )
-	    mem_data = load_para[0] ? dmem_rdata[15:0] : dmem_rdata[7:0];
-	else if ( load_para[1] )
+	if ( active_para[`MMBUF_PARA_LEN-1] )
+	    mem_data = active_para[`MMBUF_PARA_LEN-2] ? csr_data : mul_in_data;
+	else if ( active_para[2] )
+	    mem_data = active_para[0] ? dmem_rdata[15:0] : dmem_rdata[7:0];
+	else if ( active_para[1] )
 	    mem_data = dmem_rdata;
 	else 
-	    mem_data = load_para[0] ? { {16{dmem_rdata[15]}}, dmem_rdata[15:0] } : { {24{dmem_rdata[7]}},dmem_rdata[7:0] };
+	    mem_data = active_para[0] ? { {16{dmem_rdata[15]}}, dmem_rdata[15:0] } : { {24{dmem_rdata[7]}},dmem_rdata[7:0] };
 	
-    assign mem_release             = this_op;
+
+    //misc processing	
+
+    assign dmem_exception =  req_sent & dmem_resp & dmem_err;
+
+    assign membuf_int_pc = active_vld ? active_pc : schedule_int_pc;
+	
+	`FFx(mmbuf_length,0)
+	mmbuf_length <= clear_pipeline ? 0 : (combine_length - command_release);
+	
+	assign membuf_mem_num = mmbuf_length;
+	
+	`FFx(mmbuf_para,0)
+	mmbuf_para <= clear_pipeline ? 0 : (combine_para>>(command_release*`MMBUF_PARA_LEN));
+
+    `FFx(mmbuf_addr,0)
+	mmbuf_addr <= clear_pipeline ? 0 : (combine_addr>>(command_release*`XLEN));
+
+    `FFx(mmbuf_wdata,0)
+	mmbuf_wdata <= clear_pipeline ? 0 : (combine_wdata>>(command_release*`XLEN));
+
+    `FFx(mmbuf_pc,0)
+	mmbuf_pc <= clear_pipeline ? 0 : (combine_pc>>(command_release*`XLEN));
+	
+    `FFx(membuf_rd_list_ch0,0)
+	membuf_rd_list_ch0 <= clear_pipeline ? 0 : (command_release ? chain_rd_list1[`MMBUF_LEN] : chain_rd_list0[`MMBUF_LEN]);
+
+    `FFx(membuf_rd_list_ch1,0)
+    membuf_rd_list_ch1 <= clear_pipeline ? 0 : (command_release ? chain_rd_list2[`MMBUF_LEN] : chain_rd_list1[`MMBUF_LEN]);	
+
+    assign membuf_rd_list = command_release ? membuf_rd_list_ch1 : membuf_rd_list_ch0;		
 	
 endmodule

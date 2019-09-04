@@ -88,6 +88,7 @@ module tb_ssrv;
         .imem_addr              (imem_addr          ),
         .imem_rdata             (imem_rdata         ),
         .imem_resp              (imem_resp          ),
+		.imem_err               (1'b0               ),
         // Data memory interface
         .dmem_req               (dmem_req           ),
         .dmem_cmd               (dmem_cmd           ),
@@ -95,7 +96,8 @@ module tb_ssrv;
         .dmem_addr              (dmem_addr          ),
         .dmem_wdata             (dmem_wdata         ),
         .dmem_rdata             (dmem_rdata         ),
-        .dmem_resp              (dmem_resp          )	
+        .dmem_resp              (dmem_resp          ),
+        .dmem_err               (1'b0               )		
     
     );
 	
@@ -104,6 +106,8 @@ module tb_ssrv;
     reg     log_finish = 0;
     integer instr_num = 0;
     integer tick_num = 0;
+	integer jump_num = 0;
+	integer mem_num = 0;
     integer each_num `N(`EXEC_LEN+1);
 	
     function `N(`EXEC_OFF) all_of_it(input `N(`EXEC_LEN) vld);
@@ -113,20 +117,15 @@ module tb_ssrv;
         for (i=0;i<`EXEC_LEN;i=i+1)
     	    all_of_it = all_of_it + vld[i];
     end
-    endfunction
-    
-    reg `N(`EXEC_LEN) exec_vld;
-    `COMB begin:comb_exec_vld
-        integer i;
-    	for (i=0;i<`EXEC_LEN;i=i+1)
-    	    exec_vld[i] = u_ssrv.exec_instr[i*`XLEN];
-    end
-    
+    endfunction 
+  
     always @ ( posedge clk )
     if ( log_start ) begin
         tick_num <= tick_num + 1'b1;
-    	instr_num <= instr_num + all_of_it(exec_vld);
-    	each_num[all_of_it(exec_vld)] <= each_num[all_of_it(exec_vld)] + 1;
+    	instr_num <= instr_num + all_of_it(u_ssrv.exec_vld);
+		jump_num <= jump_num + u_ssrv.jump_vld;
+		mem_num <= mem_num + u_ssrv.dmem_req;
+    	each_num[all_of_it(u_ssrv.exec_vld)] <= each_num[all_of_it(u_ssrv.exec_vld)] + 1;
     end	
 
     always @ ( posedge clk )
@@ -135,23 +134,62 @@ module tb_ssrv;
 		log_finish <= 0;
 	end
     else if ( ~log_finish ) 
-        if ( ~log_start & u_ssrv.u_sys_csr.instr_is_csr ) begin:ff_log0
+        if ( ~log_start & u_ssrv.i_sys.csr_vld & ((u_ssrv.i_sys.csr_addr==12'hc00)|(u_ssrv.i_sys.csr_addr==12'hc01)|(u_ssrv.i_sys.csr_addr==12'hc80)) ) begin:ff_log0
     	    integer i;
             log_start <= 1'b1;
 			tick_num <= 0;
 			instr_num <= 0;
+			jump_num <= 0;
+			mem_num <= 0;
     	    for(i=0;i<=`EXEC_LEN;i=i+1)
     		    each_num[i] <= 0;
     	end
-    	else if ( log_start & u_ssrv.u_sys_csr.instr_is_csr ) begin:ff_log1
+    	else if ( log_start & u_ssrv.i_sys.csr_vld& ((u_ssrv.i_sys.csr_addr==12'hc00)|(u_ssrv.i_sys.csr_addr==12'hc01)|(u_ssrv.i_sys.csr_addr==12'hc80)) ) begin:ff_log1
     	    integer n;
     	    log_start <= 1'b0;
     		log_finish <= 1'b1;
     		$display("ticks = %d  instructions = %d  I/T = %f",tick_num,instr_num,$itor(instr_num)/tick_num); 
     		for (n=0;n<=`EXEC_LEN;n=n+1) 
     		    $display(" %d -- %d -- %f ",n, each_num[n], $itor(each_num[n])/tick_num);
+			$display("Jump number is %d --ratio: %f",jump_num,$itor(jump_num)/tick_num);
+			$display("MEM number is %d --ratio: %f",mem_num,$itor(mem_num)/tick_num);
     	end else;
     else;	
+	
 `endif
+
+/*
+
+`ifdef USE_SSRV
+integer fd_jump,fd_time;
+initial begin
+    fd_jump = $fopen("jump_b.txt","w");
+	fd_time = $fopen("time_b.txt","w");
+end
+
+always @ (posedge clk)
+if ( u_ssrv.jump_vld & ~rst ) begin
+    $fdisplay(fd_jump,"%8h",u_ssrv.jump_pc);
+    $fdisplay(fd_time,"%d",$time);		
+end
+
+
+`else
+
+integer fd_jump,fd_time;
+initial begin
+    fd_jump = $fopen("jump_a.txt","w");
+	fd_time = $fopen("time_a.txt","w");
+end
+
+always @ (posedge `CORE_FIELD.clk)
+if ( `CORE_FIELD.i_pipe_top.i_pipe_exu.new_pc_req & `CORE_FIELD.core_rst_n ) begin
+    $fdisplay(fd_jump,"%8h",`CORE_FIELD.i_pipe_top.i_pipe_exu.new_pc);
+    $fdisplay(fd_time,"%d",$time);		
+end
+
+`endif
+
+*/
 
 endmodule

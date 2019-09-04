@@ -18,165 +18,61 @@
 
 `include "define.v"
 module alu_with_jump(
-    //system signals
     input                                clk,
 	input                                rst,
 
-	//from schedule
-    input `N(`XLEN)                      instr,
-    input `N(`XLEN)                      pc, 
 	input                                vld,
-
-	//between mprf                       
-    output `N(5)                         rs0_sel,
-    output `N(5)                         rs1_sel,
+    input `N(`XLEN)                      instr,
+	input `N(`FETCH_PARA_LEN)            para,
+    input `N(`XLEN)                      pc, 
+                      
+    output `N(`RGBIT)                    rs0_sel,
+    output `N(`RGBIT)                    rs1_sel,
     input  `N(`XLEN)                     rs0_word,
     input  `N(`XLEN)                     rs1_word,
 
-	//to instrman                        
-    output                               jump_vld,
-    output `N(`XLEN)                     jump_pc,
+                           
+    output `N(`RGBIT)                    rd_sel,
+    output `N(`XLEN)                     rd_data,
 
-	//to mprf                            
-    output     `N(5)                     rg_sel,
-    output reg `N(`XLEN)                 rg_data,
-
-	//to membuf                          
     output                               mem_vld,
-    output reg `N(`MEMB_PARA)            mem_para,
+    output `N(`MMBUF_PARA_LEN)           mem_para,
     output `N(`XLEN)                     mem_addr,
     output `N(`XLEN)                     mem_wdata,
+	output `N(`FETCH_PARA_LEN-`EXEC_PARA_LEN-3) mem_extra_para,
 	
-	//from csr 
-    input  `N(`XLEN)                     csr_data
+	output                               branch_vld,
+	output `N(`XLEN)                     branch_pc
 
 );
 
-    //To give some common parameter for one instruction
-    function [23:0] rv_para(input vld,input [31:0] i);
-    begin
-	    if ( ~vld )
-		    rv_para = 0;
-	    else if ( i[1:0]==2'b11 ) 
-            case(i[6:2])
-            //                         mul    fencei    fence    sys    csr  jdirct   jcond    mem    alu        rd[4:0]       rs1[4:0]     rs0[4:0]
-            5'b01101 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],         5'h0,         5'h0    };//LUI
-            5'b00101 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],         5'h0,         5'h0    };//AUIPC
-            5'b11011 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b1,   1'b0,  1'b0,  1'b0,       i[11:7],         5'h0,         5'h0    };//JAL
-            5'b11001 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b1,   1'b0,  1'b0,  1'b0,       i[11:7],         5'h0,     i[19:15]    };//JALR
-            5'b11000 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b0,   1'b1,  1'b0,  1'b0,          5'h0,     i[24:20],     i[19:15]    };//BRANCH
-            5'b00000 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b0,   1'b0,  1'b1,  1'b0,          5'h0,         5'h0,     i[19:15]    };//LOAD
-            5'b01000 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b0,   1'b0,  1'b1,  1'b0,          5'h0,     i[24:20],     i[19:15]    };//STORE    
-            5'b00100 :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b0,   1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],         5'h0,     i[19:15]    };//OP_IMM
-            5'b01100 :   rv_para = { i[25],     1'b0,    1'b0,  1'b0,  1'b0,   1'b0,   1'b0,  1'b0,~i[25],(i[25]? 5'h0:i[11:7]),i[24:20],     i[19:15]    };//OP
-            5'b00011 :   rv_para = {  1'b0,    i[12],(~i[12]),  1'b0,  1'b0,   1'b0,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,         5'h0    };//MISC_MEM
-            5'b11100 :   if (i[14:12]==3'b0)                                                                   
-                         rv_para = {  1'b0,     1'b0,    1'b0,  1'b1,  1'b0,   1'b0,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,         5'h0    };//ECALL/EBREAK
-                         else                                                                                  
-                         rv_para = {  1'b0,     1'b0,    1'b0,  1'b0,  1'b1,   1'b0,   1'b0,  1'b0,  1'b0,       i[11:7],         5'h0,(i[14]?5'h0:i[19:15])};//CSRR
-            default  :   rv_para = {  1'b0,     1'b0,    1'b0,  1'b1,  1'b0,   1'b0,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,         5'h0    };
-            endcase 
-        else
-`ifdef RV32C_SUPPORTED
-     		case({i[15:13],i[1:0]})                                            
-            5'b000_00:   rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1, {2'b1,i[4:2]},         5'h0,         5'h2    };//C.ADDI4SPN
-            5'b010_00:   rv_para = {                                           1'b0,   1'b0,  1'b1,  1'b0,          5'h0,         5'h0,{2'b1,i[9:7]}    };//C.LW
-            5'b110_00:   rv_para = {                                           1'b0,   1'b0,  1'b1,  1'b0,          5'h0,{2'b1,i[4:2]},{2'b1,i[9:7]}    };//C.SW
-            5'b000_01:   rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],         5'h0,      i[11:7]    };//C.ADDI			
-            5'b001_01:   rv_para = {                                           1'b1,   1'b0,  1'b0,  1'b0,          5'h1,         5'h0,         5'h0    };//C.JAL			
-            5'b010_01:   rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],         5'h0,         5'h0    };//C.LI			
-            5'b011_01:   rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],         5'h0,((i[11:7]==5'h2)?5'h2:5'h0)};//C.ADDI16SP/C.LUI
-            5'b100_01:   if (i[11:10]!=2'b11)                                       
-                         rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1, {2'b1,i[9:7]},         5'h0,{2'b1,i[9:7]}    };//C.SRLI/C.SRAI/C.ANDI
-                         else                                                       
-                         rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1, {2'b1,i[9:7]},{2'b1,i[4:2]},{2'b1,i[9:7]}    };//C.SUB/C.XOR/C.OR/C.AND
-            5'b101_01:   rv_para = {                                           1'b1,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,         5'h0    };//C.J
-            5'b110_01,                                                                                                           
-            5'b111_01:   rv_para = {                                           1'b0,   1'b1,  1'b0,  1'b0,          5'h0,         5'h0,{2'b1,i[9:7]}    };//C.BEQZ/C.BNEZ
-            5'b000_10:   rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],         5'h0,      i[11:7]    };//C.SLLI
-            5'b010_10:   rv_para = {                                           1'b0,   1'b0,  1'b1,  1'b0,          5'h0,         5'h0,         5'h2    };//C.LWSP
-            5'b100_10:   if ( ~i[12] & (i[6:2]==5'h0) )                          
-                         rv_para = {                                           1'b1,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,      i[11:7]    };//C.JR
-                         else if ( ~i[12] & (i[6:2]!=5'h0)  )                    
-                         rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],       i[6:2],         5'h0    };//C.MV
-                         else if((i[11:7]==5'h0)&(i[6:2]==5'h0))           
-                         rv_para = {                            1'b1,  1'b0,   1'b0,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,         5'h0    };//C.EBREAK
-                         else if (i[6:2]==5'h0)                                  
-                         rv_para = {                                           1'b1,   1'b0,  1'b0,  1'b0,          5'h1,         5'h0,      i[11:7]    };//C.JALR
-                         else                                                    
-                         rv_para = {                                           1'b0,   1'b0,  1'b0,  1'b1,       i[11:7],       i[6:2],      i[11:7]    };//C.ADD 
-            5'b110_10:   rv_para = {                                           1'b0,   1'b0,  1'b1,  1'b0,          5'h0,       i[6:2],         5'h2    };//C.SWSP
-            default  :   rv_para = {                            1'b1,  1'b0,   1'b0,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,         5'h0    };
-            endcase
-`else 
-            rv_para =              {                            1'b1,  1'b0,   1'b0,   1'b0,  1'b0,  1'b0,          5'h0,         5'h0,         5'h0    };
-`endif			
-    end
-    endfunction 
+    `include "include_func.v"
 
-    wire          instr_is_csr,instr_is_jdirct,instr_is_jcond,instr_is_mem,instr_is_alu;
-    wire `N(5)    rd_order,rs1_order,rs0_order;
+//---------------------------------------------------------------------------
+//signal defination
+//---------------------------------------------------------------------------
+    wire                      mem, alu;
+	wire `N(`RGBIT)           rd,rs1,rs0;
+	reg  `N(`XLEN)            operand1;	
+	reg  `N(`XLEN)            operand2;
+	reg  `N(`XLEN)            rg_data;
+	reg  `N(`MMBUF_PARA_LEN)  lsu_para;
+	reg  `N(`XLEN)            mem_imm;
 
-    assign {instr_is_csr,instr_is_jdirct,instr_is_jcond,instr_is_mem,instr_is_alu,rd_order,rs1_order,rs0_order} = rv_para(vld,instr);
 
-    assign rs0_sel = rs0_order;
+//---------------------------------------------------------------------------
+//statements area
+//---------------------------------------------------------------------------
 
-    assign rs1_sel = rs1_order;
-
-	reg           cond_permit;
-
-	wire `N(`XLEN) jm_rs0 = rs0_word;
+	assign { mem,alu,rd,rs1,rs0 } = para;
 	
-	wire `N(`XLEN) jm_rs1 = rs1_word;
+	assign rs0_sel = rs0;
 	
-	assign rg_sel = rd_order;	
+	assign rs1_sel = rs1;
 	
-	
+	assign rd_sel  = (vld & alu) ? rd : 0;
 
-
-`ifdef RV32C_SUPPORTED
-
-    `COMB
-    if ( instr[1:0]==2'b11 )
-        case(instr[14:12])
-        3'b000 : cond_permit =    jm_rs0==jm_rs1;
-        3'b001 : cond_permit = ~( jm_rs0==jm_rs1);
-        3'b100 : cond_permit =    (jm_rs0[31]^jm_rs1[31]) ? jm_rs0[31] : (jm_rs0<jm_rs1);
-        3'b101 : cond_permit = ~( (jm_rs0[31]^jm_rs1[31]) ? jm_rs0[31] : (jm_rs0<jm_rs1) );
-        3'b110 : cond_permit =    jm_rs0<jm_rs1;
-        3'b111 : cond_permit = ~( jm_rs0<jm_rs1 );
-        default: cond_permit = 1'b0;
-        endcase
-    else if ( instr[13] )
-        cond_permit = jm_rs0 != 0;
-    else
-        cond_permit = jm_rs0 == 0;
-
-    assign jump_vld =  instr_is_jdirct|(instr_is_jcond & cond_permit);
-
-    wire `N(`XLEN) jump_add_rg = ( ( (instr[1:0]==2'b11) & (instr[6:2]==5'b11001) ) | (instr[1:0]==2'b10) ) ? jm_rs0 : pc; 
-
-    reg `N(`XLEN) jump_add_imm;
-	`COMB 
-	if ( instr[1:0]==2'b11 )
-	    case( instr[6:2] )
-		5'b11011 : jump_add_imm = { {12{instr[31]}},instr[19:12],instr[20],instr[30:21],1'b0 };
-		5'b11001 : jump_add_imm = { {21{instr[31]}},instr[30:20] };
-		5'b11000 : jump_add_imm = { {20{instr[31]}},instr[7],instr[30:25],instr[11:8],1'b0 };
-		default  : jump_add_imm = 0;
-		endcase
-	else case({instr[15:13],instr[1:0]}) 
-	    5'b001_01,
-		5'b101_01: jump_add_imm = { {21{instr[12]}},instr[8],instr[10:9],instr[6],instr[7],instr[2],instr[11],instr[5:3],1'b0 };
-        5'b110_01,                                                                                      
-        5'b111_01: jump_add_imm = { {24{instr[12]}},instr[6:5],instr[2],instr[11:10],instr[4:3],1'b0};		
-		default  : jump_add_imm = 0;
-		endcase
-	
-    assign jump_pc = jump_add_rg + jump_add_imm;
-
-	reg `N(`XLEN) operand1;
-	`COMB
+	always @*
 	if ( instr[1:0]==2'b11 )
 	    case( instr[6:2] )
 		5'b00101,
@@ -189,8 +85,7 @@ module alu_with_jump(
 	else
 	    operand1 = rs0_word;
 
-	reg `N(`XLEN) operand2;
-	`COMB
+	always @*
 	if ( instr[1:0]==2'b11 )
 	    case( instr[6:2] )
 		5'b01101,
@@ -224,10 +119,8 @@ module alu_with_jump(
     wire `N(`XLEN) shift_left_out  = rs0_word<<shift_num;
     wire `N(`XLEN) shift_right_out =  {{(`XLEN-1){alu_arith&rs0_word[`XLEN-1]}},rs0_word}>>shift_num;
 	
-	`COMB
-	if ( instr_is_csr )
-	    rg_data = csr_data;
-	else if ( instr[1:0]==2'b11 )
+	always @*
+	if ( instr[1:0]==2'b11 )
         if ( (instr[6:2]==5'b00100)|(instr[6:2]==5'b01100) )
             case( instr[14:12] )
 	        3'b000  : rg_data = add_out;
@@ -259,123 +152,81 @@ module alu_with_jump(
         rg_data = shift_left_out;
     else
         rg_data = add_out;
-		
-	assign mem_vld = instr_is_mem;
 
-    assign mem_wdata = jm_rs1;	
- 
-    `COMB
-	if ( instr[1:0]==2'b11 )
-	    mem_para = {instr[11:7],instr[14:12], instr[5] };
-	else case({instr[15:13],instr[1:0]})
-        5'b010_00: mem_para = { {2'b1,instr[4:2]}, 3'b010, 1'b0  };
-		5'b110_00: mem_para = {              5'h0, 3'b010, 1'b1  };
-		5'b010_10: mem_para = {       instr[11:7], 3'b010, 1'b0  };
-		5'b110_10: mem_para = {              5'h0, 3'b010, 1'b1  };
-		default  : mem_para = 0;
-		endcase	
+    assign rd_data = rg_data;
+
+
+    assign mem_vld = vld & mem;
 	
-	reg `N(`XLEN) mem_imm;
+	assign mem_extra_para = para>>(3+`EXEC_PARA_LEN);	
+	
+    `COMB
+	if ( |mem_extra_para )
+	    lsu_para = { 2'b11, instr[11:7], 1'b0, instr[14:12] };
+	else if ( instr[1:0]==2'b11 )
+	    if ( instr[6:4]==3'b111 )  //csr
+		    lsu_para = { 2'b11, instr[11:7], 1'b0, instr[14:12] };
+	    else if ( instr[6:4]==3'b011 ) //mul
+		    lsu_para = { 2'b10, instr[11:7], 1'b0, instr[14:12] };
+	    else
+	        lsu_para = { instr[11:7], instr[5] ,instr[14:12] };
+	else case({instr[15:13],instr[1:0]})
+        5'b010_00: lsu_para = { {2'b1,instr[4:2]}, 1'b0, 3'b010  };
+		5'b110_00: lsu_para = {              5'h0, 1'b1, 3'b010  };
+		5'b010_10: lsu_para = {       instr[11:7], 1'b0, 3'b010  };
+		5'b110_10: lsu_para = {              5'h0, 1'b1, 3'b010  };
+		default  : lsu_para = 0;
+		endcase		
+    
+    assign mem_para =  lsu_para;
+	
 	`COMB
 	if ( instr[1:0]==2'b11 )
-	    mem_imm = instr[5] ?  { {20{instr[31]}},instr[31:25],instr[11:7] } :  { {20{instr[31]}},instr[31:20] };
+	    if ( (instr[6:4]==3'b011)|(instr[6:4]==3'b111) )
+		    mem_imm = 0;
+		else 
+	        mem_imm = instr[5] ?  { {20{instr[31]}},instr[31:25],instr[11:7] } :  { {20{instr[31]}},instr[31:20] };
 	else if ( instr[1:0]==2'b00 )
         mem_imm = {instr[5],instr[12:10],instr[6],2'b0};
     else
         mem_imm = instr[15] ? {instr[8:7],instr[12:9],2'b0} : {instr[3:2],instr[12],instr[6:4],2'b0};
 
-	assign mem_addr = jm_rs0 + mem_imm;
+	assign mem_addr = rs0_word + mem_imm;	
 
-`else
+    assign mem_wdata = ((|mem_extra_para)|((instr[1:0]==2'b11)&(instr[6:4]==3'b111))) ? instr : rs1_word;	
 
-    `COMB
-    case(instr[14:12])
-    3'b000 : cond_permit =    jm_rs0==jm_rs1;
-    3'b001 : cond_permit = ~( jm_rs0==jm_rs1);
-    3'b100 : cond_permit =    (jm_rs0[31]^jm_rs1[31]) ? jm_rs0[31] : (jm_rs0<jm_rs1);
-    3'b101 : cond_permit = ~( (jm_rs0[31]^jm_rs1[31]) ? jm_rs0[31] : (jm_rs0<jm_rs1) );
-    3'b110 : cond_permit =    jm_rs0<jm_rs1;
-    3'b111 : cond_permit = ~( jm_rs0<jm_rs1 );
-    default: cond_permit = 1'b0;
-    endcase
-
-    assign jump_vld = instr_is_jdirct|(instr_is_jcond & cond_permit);
-
-    wire `N(`XLEN) jump_add_rg = ( instr[6:2]==5'b11001 ) ? jm_rs0 : pc; 
-
-    reg `N(`XLEN) jump_add_imm;
-	`COMB 
-	case( instr[6:2] )
-	5'b11011 : jump_add_imm = { {12{instr[31]}},instr[19:12],instr[20],instr[30:21],1'b0 };
-	5'b11001 : jump_add_imm = { {21{instr[31]}},instr[30:20] };
-	5'b11000 : jump_add_imm = { {20{instr[31]}},instr[7],instr[30:25],instr[11:8],1'b0 };
-	default  : jump_add_imm = 0;
-	endcase
+    
+    //branch	
 	
-    assign jump_pc = jump_add_rg + jump_add_imm;
+	wire `N(`FETCH_PARA_LEN-`EXEC_PARA_LEN) point = para>>`EXEC_PARA_LEN;
+	
+	reg cond_satisfy;
+    always @*
+    if ( instr[1:0]==2'b11 )
+        case(instr[14:12])
+        3'b000 : cond_satisfy =    rs0_word==rs1_word;
+        3'b001 : cond_satisfy = ~( rs0_word==rs1_word);
+        3'b100 : cond_satisfy =    (rs0_word[31]^rs1_word[31]) ? rs0_word[31] : (rs0_word<rs1_word);
+        3'b101 : cond_satisfy = ~( (rs0_word[31]^rs1_word[31]) ? rs0_word[31] : (rs0_word<rs1_word) );
+        3'b110 : cond_satisfy =    rs0_word<rs1_word;
+        3'b111 : cond_satisfy = ~( rs0_word<rs1_word );
+        default: cond_satisfy = 1'b0;
+        endcase
+    else if ( instr[13] )
+        cond_satisfy = rs0_word != rs1_word;
+    else
+        cond_satisfy = rs0_word == rs1_word;    
+
+ 
+    assign branch_vld = vld & ( point[2]|point[1]|(point[0] & cond_satisfy) );
+
+	wire `N(`XLEN) branch_add0 = point[2] ? rs0_word : pc;
+	
+	wire `N(`XLEN) branch_add1 =  point[2] ? jalr_offset(instr) : ( point[1] ? jal_offset(instr) : jcond_offset(instr) );
+	
+	wire `N(`XLEN) branch_add_out = branch_add0 + branch_add1;
+   	
+    assign branch_pc = branch_add_out;
 	
 	
-	reg `N(`XLEN) operand1;
-	`COMB
-	case( instr[6:2] )
-	5'b00101,
-	5'b11011,
-	5'b11001 :  operand1 = pc;
-	default  :  operand1 = rs0_word;
-	endcase
-		
-	reg `N(`XLEN) operand2;
-	`COMB
-	case( instr[6:2] )
-	5'b01101,
-    5'b00101 : operand2 =  { instr[31:12],12'b0 };
-	5'b11011,
-	5'b11001 : operand2 =  4;
-	5'b00100 : operand2 =  { {21{instr[31]}},instr[30:20] };
-	default  : operand2 = rs1_word;
-	endcase
-		
-    wire alu_sub = (instr[6:2]==5'b01100) & instr[30];
-
-    wire `N(`XLEN) add_out = alu_sub ? ( operand1 - operand2 ) : ( operand1 + operand2 );
-    wire `N(`XLEN) xor_out = operand1 ^ operand2;
-    wire `N(`XLEN) or_out  = operand1 | operand2;
-    wire `N(`XLEN) and_out = operand1 & operand2;	
-   
-    wire alu_arith =  instr[30];
-   	wire `N(5)  shift_num = operand2[4:0];
-    wire `N(`XLEN) shift_left_out  = rs0_word<<shift_num;
-    wire `N(`XLEN) shift_right_out =  {{(`XLEN-1){alu_arith&rs0_word[`XLEN-1]}},rs0_word}>>shift_num;
-   
-   `COMB
-    if ( instr_is_csr )
-	    rg_data = csr_data;
-	else if ( (instr[6:2]==5'b00100)|(instr[6:2]==5'b01100) )
-        case( instr[14:12] )
-	    3'b000  : rg_data = add_out;
-	    3'b010  : rg_data = (operand1[31]^operand2[31]) ? operand1[31] : (operand1<operand2);
-	    3'b011  : rg_data = (operand1<operand2);
-	    3'b100  : rg_data = xor_out;
-	    3'b110  : rg_data = or_out;
-	    3'b111  : rg_data = and_out;
-	    3'b001  : rg_data = shift_left_out;
-	    3'b101  : rg_data = shift_right_out;
-	    default : rg_data = add_out;
-	    endcase
-    else 
-        rg_data = add_out;
-			
-	assign mem_vld = instr_is_mem;
-
-    assign mem_wdata = jm_rs1;	
-
-    `COMB    
-	mem_para = {instr[11:7],instr[14:12], instr[5] };
-	
-	wire `N(`XLEN)  mem_imm = instr[5] ?  { {20{instr[31]}},instr[31:25],instr[11:7] } :  { {20{instr[31]}},instr[31:20] };
-
-	assign mem_addr = jm_rs0 + mem_imm;
-`endif
-
-
 endmodule
