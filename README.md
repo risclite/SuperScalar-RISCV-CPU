@@ -17,7 +17,7 @@ The 2nd stage: SSRV will fetch "BUS_LEN" number of 32-bit instructions in one cy
 
 The 3rd stage: Every instruction in "EXEC" area has its own ALU, which fetch operands  or store "Rd" between "register file", and send memory operation or CSR/mul opertations to "memory buffer". 
 
-![diagram](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/diagram.png)
+![diagram](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/diagram.png)
 
 ## Benchmark ##
 
