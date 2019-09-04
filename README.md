@@ -21,7 +21,7 @@ The 3rd stage: Every instruction in "EXEC" area has its own ALU, which fetch ope
 
 ## Benchmark ##
 
-This project is inspired and based on Syntacore's core: SCR1 [https://github.com/syntacore/scr1]. Syntacore supplies "riscv_isa", "riscv_compliance", "coremark" and "dhrystone21" simulation tests. So, the basic benchmark scores could be listed here:
+This project is inspired and based on Syntacore's core: [SCR1](https://github.com/syntacore/scr1). Syntacore supplies "riscv_isa", "riscv_compliance", "coremark" and "dhrystone21" simulation tests. So, the basic benchmark scores could be listed here:
 
 |EXEC_LEN       | Best performance(DMIPS/MHz) | -O3 -noinline Option(DMIPS/MHz) |
 | ------------- | --------------------------- | ------------------------------- |
