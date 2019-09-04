@@ -40,7 +40,7 @@ Based on mult-in mult-out buffers. There are 4 buffers in SSRV, each of which co
 Add Chinese help wiki [中文维基](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/ChineseWiki)
 
 ## How to start ##
-Strongly recommend download simulation environment of SCR1. It supply a whole suite  of development. Its link is here: [https://github.com/syntacore/scr1]
+Strongly recommend download simulation environment of [SCR1](https://github.com/syntacore/scr1). It supply a whole suite  of development.
 
 In the directory "scr1", I have included its whole source code. You can enter its sub-directory "sim", run "compile.do" to compile source files of SCR1 and this core, and run "sim.do" to make two testbench file running simultaneously. 
 
