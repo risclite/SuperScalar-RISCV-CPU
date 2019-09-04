@@ -37,6 +37,7 @@ This project is inspired and based on Syntacore's core: SCR1 [https://github.com
 ## Status ##
 Based on mult-in mult-out buffers. There are 4 buffers in SSRV, each of which could be customized and have different performance.
 
+Add Chinese help wiki [中文维基](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/ChineseWiki)
 
 ## How to start ##
 Strongly recommend download simulation environment of SCR1. It supply a whole suite  of development. Its link is here: [https://github.com/syntacore/scr1]
