@@ -112,7 +112,7 @@ module instrbits
 	generate
 	genvar i;
 	    for (i=0;i<`FETCH_LEN;i=i+1) begin:gen_fetch
-		    wire `N(`XLEN) instr = inbits_data[(start[i]*`HLEN)+:`XLEN];
+		    wire `N(`XLEN) instr = inbits_data>>(start[i]*`HLEN);
 			
 			wire `N(2)     err   = inbits_err[start[i]+:2];
 			
