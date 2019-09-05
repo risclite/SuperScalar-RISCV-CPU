@@ -1,1 +1,1 @@
-vsim work.scr1_top_tb_ahb work.tb_ssrv
+vsim work.scr1_top_tb_ahb work.tb_ssrv  -voptargs=+acc
