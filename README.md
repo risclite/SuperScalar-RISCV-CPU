@@ -97,8 +97,6 @@ If you open the definition of "USE_SSRV", SSRV CPU core will take over the autho
 
 In "build" directory, "test_info" will list hex files and you can use "#" to exclude some you do not want to run.
 
-Welcome to my high performance CPU world!!! 
-
 [lixinbingg@163.com] 
 
 
