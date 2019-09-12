@@ -1,7 +1,7 @@
 # SuperScalar-RISCV-CPU
 super-scalar out-of-order rv32imc cpu core, 4+ DMIPS/MHz(best performance) 2+ DMIPS/MHz(with noinline option)
 
-A tutorial on SSRV is here: [tutorial](https://risclite.github.io/)
+A tutorial on SSRV is here: [tutorial](https://risclite.github.io/) Chinese version : [中文教程](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/中文帮助维基).
 
 ## Overview ##
 
@@ -63,8 +63,6 @@ All files of SSRV are synthesizable and aimed to provide a high-performance core
 
 If you want to utilize SSRV to build a high-performance CPU core of your own, just modify “sys_csr.v” to have your own system control solution and combine that with other files to be your high-performance core. You are free to choose appropriate parameters, which will give your balance between performance and logic cell cost.
 
-
-Now, Chinese tutorial wiki is on-line : [中文教程](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/中文帮助维基). English version will come soon.
 
 
 ## Benchmark ##
