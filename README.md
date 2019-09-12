@@ -1,6 +1,7 @@
 # SuperScalar-RISCV-CPU
 super-scalar out-of-order rv32imc cpu core, 4+ DMIPS/MHz(best performance) 2+ DMIPS/MHz(with noinline option)
 
+A tutorial on SSRV is here: [tutorial](https://risclite.github.io/)
 
 ## Overview ##
 
