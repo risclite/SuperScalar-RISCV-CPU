@@ -16,7 +16,7 @@ SSRV is based on 4 different multiple-in, multiple-out buffers connected with ea
 
 ![diagram](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/diagram.png)
 
-If these 3 parameters are given different values, this core will show different Dhrystone Benchmark scores. The next table will list how these key parameters produces different performance cores.
+If these 3 parameters are given different values, this core will show different Dhrystone Benchmark scores. The next table will list how these key parameters produce different performance cores.
 
 |FETCH_LEN--SDBUF_LEN--EXEC_LEN |	DHRY(best) |	DMIPS/MHz(best) |	DHRY(legal) |	DMIPS/MHz(legal)   |
 |-------------------------------|------------|------------------|-------------|--------------------|
