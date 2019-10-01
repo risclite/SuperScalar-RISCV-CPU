@@ -1,0 +1,1 @@
+vsim work.scr1_top_tb_ahb -voptargs=+acc

@@ -1,0 +1,220 @@
+
+/home/xxxx/github/scr1/build/remu.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text.init:
+
+00000000 <SIM_EXIT-0xf4>:
+	...
+
+000000f4 <SIM_EXIT>:
+  f4:	00000013          	nop
+
+000000f8 <SIM_STOP>:
+  f8:	0000006f          	j	f8 <SIM_STOP>
+  fc:	ffff                	0xffff
+  fe:	ffff                	0xffff
+	...
+
+000001c0 <trap_vector>:
+ 1c0:	34202f73          	csrr	t5,mcause
+ 1c4:	4fa1                	li	t6,8
+ 1c6:	03ff0563          	beq	t5,t6,1f0 <_report>
+ 1ca:	4fa5                	li	t6,9
+ 1cc:	03ff0263          	beq	t5,t6,1f0 <_report>
+ 1d0:	4fad                	li	t6,11
+ 1d2:	01ff0f63          	beq	t5,t6,1f0 <_report>
+ 1d6:	00000f17          	auipc	t5,0x0
+ 1da:	e2af0f13          	addi	t5,t5,-470 # 0 <CL_SIZE-0x20>
+ 1de:	000f0363          	beqz	t5,1e4 <trap_vector+0x24>
+ 1e2:	8f02                	jr	t5
+ 1e4:	34202f73          	csrr	t5,mcause
+ 1e8:	000f5363          	bgez	t5,1ee <handle_exception>
+ 1ec:	a009                	j	1ee <handle_exception>
+
+000001ee <handle_exception>:
+ 1ee:	4505                	li	a0,1
+
+000001f0 <_report>:
+ 1f0:	1700006f          	j	360 <sc_exit>
+ 1f4:	00000013          	nop
+ 1f8:	00000013          	nop
+ 1fc:	00000013          	nop
+
+00000200 <_start>:
+ 200:	f1402573          	csrr	a0,mhartid
+ 204:	e101                	bnez	a0,204 <_start+0x4>
+ 206:	4e01                	li	t3,0
+ 208:	00000297          	auipc	t0,0x0
+ 20c:	fb828293          	addi	t0,t0,-72 # 1c0 <trap_vector>
+ 210:	30529073          	csrw	mtvec,t0
+ 214:	4505                	li	a0,1
+ 216:	057e                	slli	a0,a0,0x1f
+ 218:	00054863          	bltz	a0,228 <_start+0x28>
+ 21c:	0ff0000f          	fence
+ 220:	85f2                	mv	a1,t3
+ 222:	4501                	li	a0,0
+ 224:	00000073          	ecall
+ 228:	00000297          	auipc	t0,0x0
+ 22c:	dd828293          	addi	t0,t0,-552 # 0 <CL_SIZE-0x20>
+ 230:	00028e63          	beqz	t0,24c <_start+0x4c>
+ 234:	10529073          	csrw	stvec,t0
+ 238:	0000b2b7          	lui	t0,0xb
+ 23c:	10928293          	addi	t0,t0,265 # b109 <_gp+0xa501>
+ 240:	30229073          	csrw	medeleg,t0
+ 244:	30202373          	csrr	t1,medeleg
+ 248:	fa6293e3          	bne	t0,t1,1ee <handle_exception>
+ 24c:	30005073          	csrwi	mstatus,0
+ 250:	00000297          	auipc	t0,0x0
+ 254:	05028293          	addi	t0,t0,80 # 2a0 <_run_test>
+ 258:	34129073          	csrw	mepc,t0
+ 25c:	f1402573          	csrr	a0,mhartid
+ 260:	30200073          	mret
+	...
+
+Disassembly of section .text:
+
+000002a0 <_run_test>:
+ 2a0:	40d1                	li	ra,20
+ 2a2:	4119                	li	sp,6
+ 2a4:	0220f1b3          	remu	gp,ra,sp
+ 2a8:	4e89                	li	t4,2
+ 2aa:	4e09                	li	t3,2
+ 2ac:	09d19a63          	bne	gp,t4,340 <fail>
+
+000002b0 <test_3>:
+ 2b0:	fec00093          	li	ra,-20
+ 2b4:	4119                	li	sp,6
+ 2b6:	0220f1b3          	remu	gp,ra,sp
+ 2ba:	4e89                	li	t4,2
+ 2bc:	4e0d                	li	t3,3
+ 2be:	09d19163          	bne	gp,t4,340 <fail>
+
+000002c2 <test_4>:
+ 2c2:	40d1                	li	ra,20
+ 2c4:	ffa00113          	li	sp,-6
+ 2c8:	0220f1b3          	remu	gp,ra,sp
+ 2cc:	4ed1                	li	t4,20
+ 2ce:	4e11                	li	t3,4
+ 2d0:	07d19863          	bne	gp,t4,340 <fail>
+
+000002d4 <test_5>:
+ 2d4:	fec00093          	li	ra,-20
+ 2d8:	ffa00113          	li	sp,-6
+ 2dc:	0220f1b3          	remu	gp,ra,sp
+ 2e0:	fec00e93          	li	t4,-20
+ 2e4:	4e15                	li	t3,5
+ 2e6:	05d19d63          	bne	gp,t4,340 <fail>
+
+000002ea <test_6>:
+ 2ea:	4081                	li	ra,0
+ 2ec:	4105                	li	sp,1
+ 2ee:	0220f1b3          	remu	gp,ra,sp
+ 2f2:	4e81                	li	t4,0
+ 2f4:	4e19                	li	t3,6
+ 2f6:	05d19563          	bne	gp,t4,340 <fail>
+
+000002fa <test_7>:
+ 2fa:	4081                	li	ra,0
+ 2fc:	fff00113          	li	sp,-1
+ 300:	0220f1b3          	remu	gp,ra,sp
+ 304:	4e81                	li	t4,0
+ 306:	4e1d                	li	t3,7
+ 308:	03d19c63          	bne	gp,t4,340 <fail>
+
+0000030c <test_8>:
+ 30c:	4081                	li	ra,0
+ 30e:	4101                	li	sp,0
+ 310:	0220f1b3          	remu	gp,ra,sp
+ 314:	4e81                	li	t4,0
+ 316:	4e21                	li	t3,8
+ 318:	03d19463          	bne	gp,t4,340 <fail>
+
+0000031c <test_9>:
+ 31c:	4085                	li	ra,1
+ 31e:	4101                	li	sp,0
+ 320:	0220f1b3          	remu	gp,ra,sp
+ 324:	4e85                	li	t4,1
+ 326:	4e25                	li	t3,9
+ 328:	01d19c63          	bne	gp,t4,340 <fail>
+
+0000032c <test_10>:
+ 32c:	4081                	li	ra,0
+ 32e:	4101                	li	sp,0
+ 330:	0220f1b3          	remu	gp,ra,sp
+ 334:	4e81                	li	t4,0
+ 336:	4e29                	li	t3,10
+ 338:	01d19463          	bne	gp,t4,340 <fail>
+ 33c:	01c01863          	bne	zero,t3,34c <pass>
+
+00000340 <fail>:
+ 340:	0ff0000f          	fence
+ 344:	85f2                	mv	a1,t3
+ 346:	4505                	li	a0,1
+ 348:	00000073          	ecall
+
+0000034c <pass>:
+ 34c:	0ff0000f          	fence
+ 350:	85f2                	mv	a1,t3
+ 352:	4501                	li	a0,0
+ 354:	00000073          	ecall
+
+00000358 <ecall>:
+ 358:	00000073          	ecall
+ 35c:	0000                	unimp
+	...
+
+00000360 <sc_exit>:
+ 360:	d95ff06f          	j	f4 <SIM_EXIT>
+ 364:	00000013          	nop
+ 368:	00000013          	nop
+ 36c:	00000013          	nop
+ 370:	00000013          	nop
+ 374:	00000013          	nop
+ 378:	00000013          	nop
+ 37c:	00000013          	nop
+	...
+
+Disassembly of section .data:
+
+000003a0 <begin_regstate>:
+	...
+
+Disassembly of section .tohost:
+
+000003c0 <tohost>:
+	...
+
+00000400 <fromhost>:
+	...
+
+Disassembly of section .sdata:
+
+00000408 <_gp-0x800>:
+	...
+
+Disassembly of section .stack:
+
+0000fc00 <.stack>:
+	...
+
+Disassembly of section .riscv.attributes:
+
+00000000 <.riscv.attributes>:
+   0:	2841                	jal	90 <CL_SIZE+0x70>
+   2:	0000                	unimp
+   4:	7200                	flw	fs0,32(a2)
+   6:	7369                	lui	t1,0xffffa
+   8:	01007663          	bgeu	zero,a6,14 <CL_SIZE-0xc>
+   c:	001e                	c.slli	zero,0x7
+   e:	0000                	unimp
+  10:	7205                	lui	tp,0xfffe1
+  12:	3376                	fld	ft6,376(sp)
+  14:	6932                	flw	fs2,12(sp)
+  16:	7032                	flw	ft0,44(sp)
+  18:	5f30                	lw	a2,120(a4)
+  1a:	326d                	jal	fffff9c4 <_gp+0xffffedbc>
+  1c:	3070                	fld	fa2,224(s0)
+  1e:	665f 7032 5f30      	0x5f307032665f
+  24:	30703263          	0x30703263
+	...
