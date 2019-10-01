@@ -38,7 +38,6 @@ module schedule(
 	input  `N(`RGLEN)                                                        membuf_rd_list,
 	input  `N(`MMBUF_OFF)                                                    membuf_mem_num,
 	input  `N(`RFBUF_OFF)                                                    mprf_rf_num,
-
     input                                                                    mem_release,
     input                                                                    clear_pipeline,
 	input                                                                    jump_vld,
@@ -235,9 +234,9 @@ module schedule(
 			end
 	    end		
 		
-		wire vld_out = clear_pipeline ? ( ~(fetch|(order!=0)|special) ) : ( jump_vld ? (~fetch) : 1'b1 );
+		wire `N(`MMCMB_OFF) order_out = get_order(order,mem_release);		
 		
-		wire `N(`MMCMB_OFF) order_out = get_order(order,mem_release);
+		wire vld_out = clear_pipeline ? ( ~(fetch|(order_out!=0)|special) ) : ( jump_vld ? (~fetch) : 1'b1 );
 
         assign chain_sdbuf_has_special[i+1] = chain_sdbuf_has_special[i]|( vld_out&special&(go_sdbuf[i]!=`SDBUF_LEN) );
 		assign chain_sdbuf_mem_num[i+1]     = chain_sdbuf_mem_num[i] + (vld_out&mem);		

@@ -20,11 +20,7 @@
 module mprf(
     input                                clk,
 	input                                rst,
-                    
-	input                                mem_release,
-	input  `N(`RGBIT)                    mem_sel,
-	input  `N(`XLEN)                     mem_data,
-                
+   
 	input  `N(`EXEC_LEN*`RGBIT)          rd_sel,
 	input  `N(`EXEC_LEN*`MMCMB_OFF)      rd_order,
 	input  `N(`EXEC_LEN*`XLEN)           rd_data,
@@ -34,7 +30,13 @@ module mprf(
 	output reg `N(`EXEC_LEN*`XLEN)       rs0_data,
 	output reg `N(`EXEC_LEN*`XLEN)       rs1_data,
 
+    //from membuf
+	input                                mem_release,
+	input  `N(`RGBIT)                    mem_sel,
+	input  `N(`XLEN)                     mem_data,
+    //from sys_csr
 	input                                clear_pipeline,
+	//to schedule
 	output `N(`RFBUF_OFF)                mprf_rf_num
 );
 

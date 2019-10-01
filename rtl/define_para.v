@@ -49,7 +49,7 @@
 `define SDBUF_OFF              $clog2(`SDBUF_LEN+1)
 `define EXEC_LEN               4
 `define EXEC_OFF               $clog2(`EXEC_LEN+1)
-`define FETCH_PARA_LEN         (8+3*`RGBIT)
+`define FETCH_PARA_LEN         (9+3*`RGBIT)
 `define EXEC_PARA_LEN          (2+3*`RGBIT)
 
 //membuf.v

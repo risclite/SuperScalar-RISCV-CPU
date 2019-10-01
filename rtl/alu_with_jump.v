@@ -158,7 +158,7 @@ module alu_with_jump(
 
     assign mem_vld = vld & mem;
 	
-	assign mem_extra_para = para>>(3+`EXEC_PARA_LEN);	
+	assign mem_extra_para = para>>(4+`EXEC_PARA_LEN);	
 	
     `COMB
 	if ( |mem_extra_para )
