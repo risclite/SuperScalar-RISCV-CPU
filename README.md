@@ -80,10 +80,23 @@ This project is inspired and based on Syntacore's core: [SCR1](https://github.co
 --RISCV gcc version: 8.3.0 
 --RV32IMC
 
-## Status ##
-Based on mult-in mult-out buffers. There are 4 buffers in SSRV, each of which could be customized and have different performance.
+## SSRV-ON-SCR1 ##
 
-Add Chinese help wiki [中文维基](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/中文帮助维基)
+SSRV is a main framework to build a high performance CPU core. If it is connected with system control units as the same as peripherals, it will provide the high-performance attribute for different CPU cores.
+ 
+Since the simulation environment is inherited from SCR1, it is very convenient to instantiate SSRV into SCR1 to improve instruction throughput ability. SSRV will replace the basic instruction processing modules.  All instructions will be dealt with except system and CSR instructions, which will be forwarded to SCR1’s system and CSR module: scr1_pipe_csr.sv.
+
+![ssrv-on-scr1](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/ssrv-on-scr1.png)
+
+SSRV and "scr1_pipe_csr" constitute a new basic hierarchy level: "pipeline". The "pipeline" level could be instantiated by the upper level: "core", which has an accessorial module: "scr1_reset_cells". The top hierarchy level adds more functions: 64KB TCM, a 64-bit timer and AXI4/AHB-lite bus interfaces.
+
+Compared with the original SCR1 core, the DHRY score will be improved from 1.14 DMIPS/MHz to 1.87 DMIPS/MHz. Unfortunately, the instruction bus width is fixed to 32 bits by SCR1, which is a limitation of performance. It is obvious that SSRV could not issue 2 or 3 instructions simultaneously when only 1 instruction is fetched from the source memory.
+
+The directory "ssrv-on-scr1" is on the subject of this SSRV CPU core based on SCR1.
+
+## Status ##
+
+SSRV cpu core are online. It could be fitted into FPGA board,now.
 
 ## How to start ##
 Strongly recommend download simulation environment of [SCR1](https://github.com/syntacore/scr1). It supply a whole suite  of development.
