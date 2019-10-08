@@ -54,7 +54,7 @@ The directory "ssrv-on-scr1" is on the subject of this SSRV CPU core based on SC
 
     * test/
 
-    Tow synthesizable files: rxtx.v, which is a simple UART verilog file; and "ssrv_memory.v, which instantiates the 64KB dualport ram.
+    Two synthesizable files: rxtx.v, which is a simple UART verilog file; and "ssrv_memory.v, which instantiates the 64KB dualport ram.
     
     The FPGA board should be connected with a UART terminal, which has a configuration of 9600, even, 1 stop bit. You can change the baud rate through the parameters of rxtx.v. Please open DE2-115.v, find the instantiation of rxtx and give your "mhz" and "baud".
 
