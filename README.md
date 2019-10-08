@@ -96,7 +96,7 @@ The directory "ssrv-on-scr1" is on the subject of this SSRV CPU core based on SC
 
 ## Status ##
 
-SSRV cpu core are online. It could be fitted into FPGA board,now.
+SSRV cpu core is online. It could be fitted into FPGA board.
 
 ## How to start ##
 Strongly recommend download simulation environment of [SCR1](https://github.com/syntacore/scr1). It supply a whole suite  of development.
