@@ -12,7 +12,7 @@ The directory "ssrv-on-scr1" is on the subject of this SSRV CPU core based on SC
 
 *  sim/
 
-    It likes the simulation environment of SSRV, but the difference is that the instruction bus bit width is fixed to 32 bit and could be adjusted to other values. 
+    It likes the simulation environment of SSRV, but the difference is that the instruction bus bit width is fixed to 32 bit and could not be adjusted to other values. 
 
     The simulation could be switched from SSRV to SCR1 by commenting the verilog defination "USE_SSRV" of "rtl/define_para.v".
 
