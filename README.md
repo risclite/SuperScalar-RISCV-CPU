@@ -3,6 +3,8 @@ super-scalar out-of-order rv32imc cpu core, 4+ DMIPS/MHz(best performance) 2+ DM
 
 A tutorial on SSRV is here: [tutorial](https://risclite.github.io/)------------Chinese version : [中文教程](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/中文帮助维基).
 
+Add FPGA implementation of SSRV: [FPGA implementaion](/ssrv-on-scr1)
+
 ## Overview ##
 
 SSRV (SuperScalar RISC-V) is an open-source RV32IMC core, which is superscalar and out-of-order. It is synthesizable  and parameterizable. It is very flexible to customize different performance.
