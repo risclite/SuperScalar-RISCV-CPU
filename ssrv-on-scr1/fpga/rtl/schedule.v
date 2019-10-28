@@ -214,6 +214,7 @@ module schedule(
 				if ( hit|(exec_num[i]==`EXEC_LEN)|(rf_num[i]==`RFBUF_LEN) ) begin
 				    go_sdbuf[i]      = sdbuf_num[i];
 					sdbuf_num[i+1]   = sdbuf_num[i] + 1'b1;
+					rf_num[i+1]      = (rf_num[i]==`RFBUF_LEN) ? `RFBUF_LEN : ( rf_num[i] + 1'b1 ); //add this to keep every skipped OP has its seat in RFBUF.
 					rs_list[i+1]     = rs_list[i]|( (1'b1<<rd)>>1 );
 					rd_list[i+1]     = rd_list[i]|( ((1'b1<<rd)|(1'b1<<rs0)|(1'b1<<rs1))>>1 );
 				end else begin
