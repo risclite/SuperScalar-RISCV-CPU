@@ -20,13 +20,13 @@ SSRV is an open-source RV32IMC CPU core. It is synthesizable and parameterizable
 
 To define 4 chained buffers is an easy way to get a configuration scheme, which accommodates instructions in flight. Let's set N as a number of instruction parallelism. The below lists give each buffer these parameters as "input size, capacity size, output size".
 
-* The instrbits buffer: N*32 bits,  3*N*32 bits, N instr(Only output is indentified as instr)
+* The instrbits buffer: N\*32 bits,  3\*N\*32 bits, N instr(Only output is indentified as instr)
 
-* The schedule buffer: N instr, 2*N instr, N instr(means N ALUs)
+* The schedule buffer: N instr, 2\*N instr, N instr(means N ALUs)
 
-* The membuf buffer: N instr, 2*N instr, 1 instr(fixed, only one data memory interface)
+* The membuf buffer: N instr, 2\*N instr, 1 instr(fixed, only one data memory interface)
 	
-* The mprf buffer: N instr, 2*N instr, N instr
+* The mprf buffer: N instr, 2\*N instr, N instr
 	
 |N            |	CoreMark ticks |CoreMark/MHz(estimated) |	DMIPS/MHz(best) |	DMIPS/MHz(legal)   |
 |-------------|----------------|------------------------|-------------------|----------------------|
