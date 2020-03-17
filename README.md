@@ -81,7 +81,7 @@ Please open "scr1/build/test_info". Add your test cases and you can use "#" to e
 
 ## FPGA evaluation ##
 
-Go to the directory: ssrv-on-scr1. If you need a simulation closed to this FPGA implementation, the sub-directory sim/ could do that. If you need a review of the FPGA project, the sub-directory fpga/ could give you an example. 
+Go to the directory: ssrv-on-scr1. If you need a simulation close to this FPGA implementation, the sub-directory sim/ could do that. If you need a review of the FPGA project, the sub-directory fpga/ could give you an example. 
 
 ![hierarchy](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/hierarchy.png)
 
