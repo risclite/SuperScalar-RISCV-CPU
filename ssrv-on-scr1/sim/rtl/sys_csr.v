@@ -24,23 +24,22 @@ module sys_csr
 (
     input                                          clk,
 	input                                          rst,
-  
-	input                                          alujmp_vld,
-	input  `N(`XLEN)                               alujmp_pc,	
- 
+
     input                                          sys_vld,
     input  `N(`XLEN)                               sys_instr,
 	input  `N(`XLEN)                               sys_pc,
-    input  `N(`FETCH_PARA_LEN-`EXEC_PARA_LEN-3)    sys_extra_para, //3 : err, illegal, sys
+	input  `N(4)                                   sys_para,
+	
+	input                                          csr_vld,
+	input  `N(`XLEN)                               csr_instr,
     input  `N(`XLEN)                               csr_rs,
-	output `N(`XLEN)                               csr_data,
+	output `N(`XLEN)                               csr_data,	
 	
 	input  `N(2)                                   dmem_exception,
 	input  `N(`XLEN)                               int_pc,
 	input                                          mem_busy,
 	
 	output                                         clear_pipeline,
-    output                                         sys_resp,
 	output                                         jump_vld,
 	output `N(`XLEN)                               jump_pc,
 	
@@ -70,75 +69,56 @@ module sys_csr
 );
 
 	//csr function	
-	wire instr_csr  = sys_vld & ( sys_extra_para==0 );
+	wire              csr_coming = csr_vld;
+	wire `N(12)         csr_addr = csr_instr[31:20];
+	wire `N(3)          csr_func = csr_instr[14:12];
 	
-	wire `N(12) csr_addr = sys_instr[31:20];
+	assign         exu2csr_r_req = csr_coming & ( csr_instr[11:7]!=5'b0 );	
+	assign       exu2csr_rw_addr = csr_addr;
+	assign              csr_data = csr2exu_r_data;
 	
-	wire `N(3)  csr_func = sys_instr[14:12];
-	
-	assign exu2csr_r_req = instr_csr & ( sys_instr[11:7]!=5'b0 );
-	
-	assign exu2csr_rw_addr = csr_addr;
-	
-	assign csr_data = csr2exu_r_data;
-	
-	assign exu2csr_w_req = instr_csr & ~( csr_func[1] & ( sys_instr[19:15]==5'b0 ) );
-	
-	assign exu2csr_w_cmd = csr_func;
-	
-	assign exu2csr_w_data = csr_func[2] ? sys_instr[19:15] : csr_rs;
+	assign         exu2csr_w_req = csr_coming & ~( csr_func[1] & ( csr_instr[19:15]==5'b0 ) );
+	assign         exu2csr_w_cmd = csr_func;
+	assign        exu2csr_w_data = csr_func[2] ? csr_instr[19:15] : csr_rs;
 	
 	//mret
-	wire instr_fencei = sys_vld & sys_extra_para[0] & ( sys_instr[6:2]==5'b00011 );
- 
-    wire instr_sys = sys_vld & sys_extra_para[0] & ~( sys_instr[6:2]==5'b00011 );   
+	wire            instr_fencei = sys_vld & sys_para[0];
+    wire               instr_sys = sys_vld & sys_para[1];   
 	
-	wire instr_mret = instr_sys & ( sys_instr[31:20]==12'h302 );
-	
-	assign exu2csr_mret_instr = instr_mret;
-	
-	assign exu2csr_mret_update = exu2csr_mret_instr;
+	wire              instr_mret = instr_sys & ( sys_instr[31:20]==12'h302 );
+	assign    exu2csr_mret_instr = instr_mret;
+	assign   exu2csr_mret_update = exu2csr_mret_instr;
 	
 	//exception	
-	wire instr_err = sys_vld & sys_extra_para[2];
+	wire               instr_err = sys_vld & sys_para[3];
+	wire           instr_illegal = sys_vld & sys_para[2]; 
 	
-	wire instr_illegal = sys_vld & sys_extra_para[1]; 
+	assign      exu2csr_take_exc = dmem_exception[1]|instr_err|instr_illegal|(instr_sys & ~instr_mret)|(csr_coming & csr2exu_rw_exc);
 	
-	assign exu2csr_take_exc = dmem_exception[1]|instr_err|instr_illegal|(instr_sys & ~instr_mret)|(instr_csr & csr2exu_rw_exc);
+	wire `N(4)         dmem_code = dmem_exception[1] ? ( dmem_exception[0] ? 4'd7 : 4'd5 ) : 0;
+	wire `N(4)          err_code = instr_err ? 4'd1 :0;
+	wire `N(4)      illegal_code = instr_illegal ? 4'd2 : 0;
+	wire `N(4)          csr_code = csr_coming ? 4'd2 : 0;
+	wire `N(4)          sys_code = (instr_sys & ~instr_mret) ? 4'd11 : 0;
 	
-	reg `N(4) exec_code;
-	always @* begin
-	    exec_code = 4'd11; //ecall_m
-	    case(1'b1)
-		dmem_exception[1] : exec_code = dmem_exception[0] ? 4'd7 : 4'd5; //st_access_fault:ld_access_fault
-		instr_err         : exec_code = 4'd1; //instr_access_fault
-		instr_illegal     : exec_code = 4'd2; //illegal_instr
-		instr_csr         : exec_code = 4'd2; //illegal_instr
-		endcase
-	end
+	wire `N(4)         exec_code = dmem_code|err_code|illegal_code|csr_code|sys_code;
+	assign      exu2csr_exc_code = exec_code;
 	
-	assign exu2csr_exc_code = exec_code;
-	
-	assign exu2csr_trap_val = sys_pc;
-	
-	assign curr_pc = sys_pc;
+	assign      exu2csr_trap_val = sys_pc;
+	assign               curr_pc = sys_pc;
 	
 	//IRQ
-	assign exu2csr_take_irq = csr2exu_irq & ~mem_busy & ~exu2csr_take_exc & ~exu2csr_mret_instr & ~instr_fencei;
-	
-	assign next_pc = int_pc;	
+	assign      exu2csr_take_irq = csr2exu_irq & ~mem_busy & ~exu2csr_take_exc & ~exu2csr_mret_instr & ~instr_fencei;
+	assign               next_pc = int_pc;	
 	
 	//jump
     reg   reset_state;	
 	`FFx(reset_state,1'b1)
 	reset_state <= 1'b0;
 
-    assign jump_vld = reset_state|alujmp_vld|instr_fencei|exu2csr_take_exc|exu2csr_mret_instr|exu2csr_take_irq;
+    assign              jump_vld = reset_state|instr_fencei|exu2csr_take_exc|exu2csr_mret_instr|exu2csr_take_irq;
+	assign               jump_pc = ( exu2csr_take_exc|exu2csr_mret_instr|exu2csr_take_irq ) ? csr2exu_new_pc : ( instr_fencei ? ( sys_pc + 3'd4 ) : ( reset_state ? START_ADDR : 0 ) );
 	
-	assign jump_pc = ( exu2csr_take_exc|exu2csr_mret_instr|exu2csr_take_irq ) ? csr2exu_new_pc : ( instr_fencei ? ( sys_pc + 3'd4 ) : ( reset_state ? START_ADDR : alujmp_pc ) );
-	
-	assign clear_pipeline = exu2csr_take_exc|exu2csr_mret_instr|exu2csr_take_irq|instr_fencei;
-	
-	assign sys_resp = sys_vld & ~exu2csr_take_exc & ~exu2csr_mret_instr & ~instr_fencei;
+	assign        clear_pipeline = dmem_exception[1]|exu2csr_take_irq;
 	
 endmodule

@@ -17,7 +17,7 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 `include "define.v"
-module alu(
+module alu (
     input                                clk,
 	input                                rst,
 
@@ -25,17 +25,15 @@ module alu(
     input `N(`XLEN)                      instr,
 	input `N(`EXEC_PARA_LEN)             para,
     input `N(`XLEN)                      pc, 
-                      
+  
     output `N(`RGBIT)                    rs0_sel,
     output `N(`RGBIT)                    rs1_sel,
     input  `N(`XLEN)                     rs0_word,
     input  `N(`XLEN)                     rs1_word,
-
-                           
+  
     output `N(`RGBIT)                    rd_sel,
     output `N(`XLEN)                     rd_data,
-
-                       
+	
     output                               mem_vld,
     output `N(`MMBUF_PARA_LEN)           mem_para,
     output `N(`XLEN)                     mem_addr,
@@ -151,14 +149,15 @@ module alu(
     assign rd_data = rg_data;
 
 
+    wire `N(`XLEN) mem_rs0_word = rs0_word;
+	wire `N(`XLEN) mem_rs1_word = rs1_word;
+
     assign mem_vld = vld & mem;
 	
-    `COMB
+    always @*
 	if ( instr[1:0]==2'b11 )
-		if ( instr[6:4]==3'b111 ) //csr
-		    lsu_para = { 2'b11, instr[11:7], 1'b0, instr[14:12] };	
-	    else if ( instr[6:4]==3'b011 ) //mul
-		    lsu_para = { 2'b10, instr[11:7], 1'b0, instr[14:12] };
+		if ( instr[6:4]==3'b011 ) //mul
+		    lsu_para = { 1'b1, instr[11:7], 1'b0, instr[14:12] };
 	    else
 	        lsu_para = { instr[11:7], instr[5] ,instr[14:12] };
 	else case({instr[15:13],instr[1:0]})
@@ -171,9 +170,9 @@ module alu(
     
     assign mem_para =  lsu_para;
 	
-	`COMB
+	always @*
 	if ( instr[1:0]==2'b11 )
-	    if ( (instr[6:4]==3'b011)|(instr[6:4]==3'b111) )
+	    if ( instr[6:4]==3'b011 )
 		    mem_imm = 0;
 		else 
 	        mem_imm = instr[5] ?  { {20{instr[31]}},instr[31:25],instr[11:7] } :  { {20{instr[31]}},instr[31:20] };
@@ -182,8 +181,8 @@ module alu(
     else
         mem_imm = instr[15] ? {instr[8:7],instr[12:9],2'b0} : {instr[3:2],instr[12],instr[6:4],2'b0};
 
-	assign mem_addr = rs0_word + mem_imm;	
+	assign mem_addr = mem_rs0_word + mem_imm;	
 
-    assign mem_wdata = ((instr[1:0]==2'b11)&(instr[6:4]==3'b111)) ? instr : rs1_word;		
+    assign mem_wdata = mem_rs1_word;		
 	
 endmodule

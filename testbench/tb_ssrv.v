@@ -106,7 +106,8 @@ module tb_ssrv;
     reg     log_finish = 0;
     integer instr_num = 0;
     integer tick_num = 0;
-	integer jump_num = 0;
+	integer jtrue_num = 0;
+	integer jfalse_num = 0;						
 	integer mem_num = 0;
     integer each_num `N(`EXEC_LEN+1);
 	
@@ -123,7 +124,8 @@ module tb_ssrv;
     if ( log_start ) begin
         tick_num <= tick_num + 1'b1;
     	instr_num <= instr_num + all_of_it(u_ssrv.exec_vld);
-		jump_num <= jump_num + u_ssrv.jump_vld;
+		jtrue_num <= jtrue_num + u_ssrv.level_decrease;
+		jfalse_num <= jfalse_num + u_ssrv.level_clear;												
 		mem_num <= mem_num + u_ssrv.dmem_req;
     	each_num[all_of_it(u_ssrv.exec_vld)] <= each_num[all_of_it(u_ssrv.exec_vld)] + 1;
     end	
@@ -139,7 +141,8 @@ module tb_ssrv;
             log_start <= 1'b1;
 			tick_num <= 0;
 			instr_num <= 0;
-			jump_num <= 0;
+			jtrue_num <= 0;
+			jfalse_num <= 0;
 			mem_num <= 0;
     	    for(i=0;i<=`EXEC_LEN;i=i+1)
     		    each_num[i] <= 0;
@@ -151,7 +154,7 @@ module tb_ssrv;
     		$display("ticks = %d  instructions = %d  I/T = %f",tick_num,instr_num,$itor(instr_num)/tick_num); 
     		for (n=0;n<=`EXEC_LEN;n=n+1) 
     		    $display(" %d -- %d -- %f ",n, each_num[n], $itor(each_num[n])/tick_num);
-			$display("Jump number is %d --ratio: %f",jump_num,$itor(jump_num)/tick_num);
+			$display("True is %d  False is %d T/(T+F) is %f",jtrue_num,jfalse_num,$itor(jtrue_num)/(jtrue_num+jfalse_num));
 			$display("MEM number is %d --ratio: %f",mem_num,$itor(mem_num)/tick_num);
     	end else;
     else;	

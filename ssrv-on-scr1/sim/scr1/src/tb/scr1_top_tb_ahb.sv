@@ -141,12 +141,12 @@ initial begin
 end
 
 reg [7:0] start_char;
-
+																																																				
 always_ff @(posedge clk) begin
     if (test_running) begin
         rst_init <= 1'b0;
 `ifdef USE_SSRV
-        if (i_top.i_core_top.i_pipe_top.i_ssrv.jump_vld & (i_top.i_core_top.i_pipe_top.i_ssrv.jump_pc==SCR1_EXIT_ADDR) & (i_top.i_core_top.i_pipe_top.i_ssrv.i_mprf.rfbuf_length==0) & ~rst_init & &rst_cnt) begin
+        if (i_top.i_core_top.i_pipe_top.i_ssrv.branch_vld & (i_top.i_core_top.i_pipe_top.i_ssrv.branch_pc==SCR1_EXIT_ADDR) & (i_top.i_core_top.i_pipe_top.i_ssrv.i_mprf.rfbuf_length==0) & ~rst_init & &rst_cnt) begin
 `else
         if ((i_top.i_core_top.i_pipe_top.curr_pc == SCR1_EXIT_ADDR) & ~rst_init & &rst_cnt) begin
 `endif

@@ -26,259 +26,325 @@ module schedule(
     input  `N(`FETCH_LEN)                                                    fetch_vld,
     input  `N(`FETCH_LEN*`XLEN)                                              fetch_instr,
     input  `N(`FETCH_LEN*`XLEN)                                              fetch_pc,
-	input  `N(`FETCH_LEN)                                                    fetch_err,
-    output `N(`FETCH_OFF)                                                    fetch_offset,
+    input  `N(`FETCH_LEN*`EXEC_PARA_LEN)                                     fetch_para,
+	input  `N(`FETCH_LEN*`JCBUF_OFF)                                         fetch_level,
  
-	output reg `N(`EXEC_LEN)                                                 exec_vld,
+	output `N(`EXEC_LEN)                                                     exec_vld,
 	output reg `N(`EXEC_LEN*`XLEN)                                           exec_instr,
 	output reg `N(`EXEC_LEN*`XLEN)                                           exec_pc,	
-	output reg `N(`EXEC_LEN*`EXEC_PARA_LEN+`FETCH_PARA_LEN-`EXEC_PARA_LEN)   exec_para,
+	output reg `N(`EXEC_LEN*`EXEC_PARA_LEN)                                  exec_para,
 	output reg `N(`EXEC_LEN*`MMCMB_OFF)                                      exec_order,
+	output reg `N(`EXEC_LEN*`JCBUF_OFF)                                      exec_level,
  
-	input  `N(`RGLEN)                                                        membuf_rd_list,
-	input  `N(`MMBUF_OFF)                                                    membuf_mem_num,
-	input  `N(`RFBUF_OFF)                                                    mprf_rf_num,
+	input                                                                    mmbuf_check_flag,
+	input  `N(`RGBIT)                                                        mmbuf_check_rdnum,
+	input  `N(`RGLEN)                                                        mmbuf_check_rdlist,
+	input  `N(`RGLEN)                                                        mmbuf_level_rdlist,
+	input  `N(`MMBUF_OFF)                                                    mmbuf_mem_num,
+	input  `N(`RFBUF_OFF)                                                    rfbuf_alu_num,
     input                                                                    mem_release,
     input                                                                    clear_pipeline,
-	input                                                                    jump_vld,
-	input  `N(`XLEN)                                                         jump_pc,
-    output `N(`XLEN)                   	                                     schedule_int_pc
+	input                                                                    level_decrease,
+	input                                                                    level_clear,
+    output `N(`SDBUF_OFF)                                                    sdbuf_left_num,
+    output `N(`RGLEN)                                                        pipeline_level_rdlist,
+    output                                                                   pipeline_is_empty,	
+	output                                                                   schd_intflag,
+    output `N(`XLEN)                   	                                     schd_intpc
 	
 );
 
+    //---------------------------------------------------------------------------
+    //function defination
+    //---------------------------------------------------------------------------
+
     `include "include_func.v"
-
-//---------------------------------------------------------------------------
-//signal defination
-//---------------------------------------------------------------------------
-    wire `N(`FETCH_LEN*`FETCH_PARA_LEN)      fetch_para;
-	wire `N(`FETCH_LEN*`MMCMB_OFF)           fetch_order;
-    wire `N(`FETCH_LEN+1)                    fetch_pick_flag;
-    wire `N(`FETCH_OFF)                      chain_fetch_offset      `N(`FETCH_LEN+1);
-
-
-    reg  `N(`MMBUF_OFF)                      mem_num                 `N(`SDBUF_LEN+1);
-	reg  `N(`RFBUF_OFF)                      rf_num                  `N(`SDBUF_LEN+1);
-	reg  `N(`RGLEN)                          rs_list                 `N(`SDBUF_LEN+1);
-	reg  `N(`RGLEN)                          rd_list                 `N(`SDBUF_LEN+1);
-	reg  `N(`EXEC_OFF)                       exec_num                `N(`SDBUF_LEN+1);
-	reg  `N(`SDBUF_OFF)                      sdbuf_num               `N(`SDBUF_LEN+1);
-	reg                                      mem_not_exec            `N(`SDBUF_LEN+1);
-	reg  `N(`EXEC_OFF)                       go_exec                 `N(`SDBUF_LEN);
-    reg  `N(`SDBUF_OFF)                      go_sdbuf                `N(`SDBUF_LEN);	
 	
-	wire                                     chain_sdbuf_has_special `N(`SDBUF_LEN+1);
-	wire `N(`EXEC_OFF)                       chain_exec_mem_num      `N(`SDBUF_LEN+1);
-	wire `N(`EXEC_OFF)                       chain_exec_rf_num       `N(`SDBUF_LEN+1);
-	wire `N(`RGLEN)                          chain_exec_rd_list      `N(`SDBUF_LEN+1);
-	wire `N(`SDBUF_OFF)                      chain_sdbuf_mem_num     `N(`SDBUF_LEN+1);
-	wire `N(`EXEC_LEN)                       chain_exec_vld          `N(`SDBUF_LEN+1);
-	wire `N(`EXEC_LEN*`XLEN)                 chain_exec_instr        `N(`SDBUF_LEN+1);
-	wire `N(`EXEC_LEN*`XLEN)                 chain_exec_pc           `N(`SDBUF_LEN+1);
-	wire `N(`EXEC_LEN*`FETCH_PARA_LEN)       chain_exec_para         `N(`SDBUF_LEN+1);
-	wire `N(`EXEC_LEN*`MMCMB_OFF)            chain_exec_order        `N(`SDBUF_LEN+1);
-	wire `N(`SDBUF_LEN)                      chain_sdbuf_vld         `N(`SDBUF_LEN+1);
-	wire `N(`SDBUF_LEN*`XLEN)                chain_sdbuf_instr       `N(`SDBUF_LEN+1);
-	wire `N(`SDBUF_LEN*`XLEN)                chain_sdbuf_pc          `N(`SDBUF_LEN+1);
-	wire `N(`SDBUF_LEN*`FETCH_PARA_LEN)      chain_sdbuf_para        `N(`SDBUF_LEN+1);
-	wire `N(`SDBUF_LEN*`MMCMB_OFF)           chain_sdbuf_order       `N(`SDBUF_LEN+1);
-	wire                                     chain_find_mem          `N(`SDBUF_LEN+1);
-	wire `N(`XLEN)                           chain_find_pc           `N(`SDBUF_LEN+1);	
+	function check_both( input `N(`EXEC_PARA_LEN) para, input `N(`RGLEN) rd_list,rs_list );
+        reg `N(`RGBIT) rs0,rs1,rd;	
+        reg    rd_hit, rs_hit;		
+	begin
+        rs0        = para;
+		rs1        = para>>`RGBIT;
+		rd         = para>>(2*`RGBIT);
+        
+        rd_hit     = |( ( rd_list & `LASTBIT_MASK ) & ( 1'b1<<rd ) );
+        rs_hit     = |( ( rs_list & `LASTBIT_MASK ) & ( ( 1'b1<<rs0 )|( 1'b1<<rs1 ) ) );
+        
+        check_both = rd_hit|rs_hit; 		
+	end
+	endfunction
+	
+	function check_gray( input `N(`EXEC_PARA_LEN) para, input `N(`RGBIT) gray_num );
+        reg `N(`RGBIT) rs0,rs1,rd;	 
+	begin
+        rs0        = para;
+		rs1        = para>>`RGBIT;
+		rd         = para>>(2*`RGBIT);
 
-    reg  `N(`SDBUF_LEN)                      sdbuf_vld;
+        check_gray = |( ( ( 1'b1<<gray_num ) & `LASTBIT_MASK ) & ( (1'b1<<rs0)|(1'b1<<rs1)|(1'b1<<rd) ) );		
+	end
+	endfunction
+	
+	
+    //---------------------------------------------------------------------------
+    //signal defination
+    //---------------------------------------------------------------------------	
+	wire `N((`FETCH_LEN+1)*`MMCMB_OFF)       chain_order;	
+    wire `N(`FETCH_LEN*`MMCMB_OFF)           fetch_order;
+	
+    wire `N(`SDBUF_LEN)                      go_vld;  
+	wire `N(`SDBUF_LEN*`XLEN)                go_instr;
+	wire `N(`SDBUF_LEN*`XLEN)                go_pc;   
+	wire `N(`SDBUF_LEN*`EXEC_PARA_LEN)       go_para;
+	wire `N(`SDBUF_LEN*`MMCMB_OFF)           go_order;
+	wire `N(`SDBUF_LEN*`JCBUF_OFF)           go_level;
+	wire `N(`SDBUF_LEN)                      go_hit;
+	wire `N(`SDBUF_LEN)                      go_preload;
+
+    wire `N(`RGLEN)                          rd_checklist             `N(`SDBUF_LEN+1);
+	wire `N(`RGLEN)                          rs_checklist             `N(`SDBUF_LEN+1);
+    wire `N(`MMBUF_LEN)                      mem_active               `N(`SDBUF_LEN+1);
+    wire `N(`RFBUF_LEN)                      rf_active                `N(`SDBUF_LEN+1);
+    wire `N(`EXEC_LEN)                       exec_active              `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_OFF)                       exec_num                 `N(`SDBUF_LEN+1);
+	wire `N(`SDBUF_OFF)                      sdbuf_num                `N(`SDBUF_LEN+1);
+
+	wire `N(`EXEC_LEN)                       chain_exec_direct        `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_LEN)                       chain_exec_preload       `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_LEN*`XLEN)                 chain_exec_instr         `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_LEN*`XLEN)                 chain_exec_pc            `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_LEN*`EXEC_PARA_LEN)        chain_exec_para          `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_LEN*`MMCMB_OFF)            chain_exec_order         `N(`SDBUF_LEN+1);	
+	wire `N(`EXEC_LEN*`JCBUF_OFF)            chain_exec_level         `N(`SDBUF_LEN+1);
+
+	wire `N(`SDBUF_LEN)                      chain_sdbuf_direct       `N(`SDBUF_LEN+1);
+	wire `N(`SDBUF_LEN)                      chain_sdbuf_preload      `N(`SDBUF_LEN+1);	
+	wire `N(`SDBUF_LEN*`XLEN)                chain_sdbuf_instr        `N(`SDBUF_LEN+1);
+	wire `N(`SDBUF_LEN*`XLEN)                chain_sdbuf_pc           `N(`SDBUF_LEN+1);
+	wire `N(`SDBUF_LEN*`EXEC_PARA_LEN)       chain_sdbuf_para         `N(`SDBUF_LEN+1);
+	wire `N(`SDBUF_LEN*`MMCMB_OFF)           chain_sdbuf_order        `N(`SDBUF_LEN+1);	
+	wire `N(`SDBUF_LEN*`JCBUF_OFF)           chain_sdbuf_level        `N(`SDBUF_LEN+1);
+	
+	wire `N(`SDBUF_OFF)                      chain_sdexec_mem_num     `N(`SDBUF_LEN+1);
+	wire `N(`RGLEN)                          chain_sdbuf_level_rdlist `N(`SDBUF_LEN+1);		
+	
+	wire `N(`EXEC_OFF)                       chain_exec_mem_num0      `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_OFF)                       chain_exec_mem_num1      `N(`SDBUF_LEN+1);	
+	wire `N(`EXEC_OFF)                       chain_exec_alu_num0      `N(`SDBUF_LEN+1);
+	wire `N(`EXEC_OFF)                       chain_exec_alu_num1      `N(`SDBUF_LEN+1);	
+	wire                                     chain_check_flag0        `N(`SDBUF_LEN+1);
+	wire                                     chain_check_flag1        `N(`SDBUF_LEN+1);
+	wire `N(`RGBIT)                          chain_check_rdnum0       `N(`SDBUF_LEN+1);
+	wire `N(`RGBIT)                          chain_check_rdnum1       `N(`SDBUF_LEN+1);
+	wire `N(`RGLEN)                          chain_check_rdlist0      `N(`SDBUF_LEN+1);
+	wire `N(`RGLEN)                          chain_check_rdlist1      `N(`SDBUF_LEN+1);	
+	
+	wire                                     chain_find_mem           `N(`SDBUF_LEN+1);
+	wire `N(`XLEN)                           chain_find_pc            `N(`SDBUF_LEN+1);		
+	
+	reg  `N(`EXEC_LEN)                       exec_direct;
+	reg  `N(`EXEC_LEN)                       exec_preload;
+
+    reg  `N(`SDBUF_LEN)                      sdbuf_direct;
+	reg  `N(`SDBUF_LEN)                      sdbuf_preload;
+    wire `N(`SDBUF_LEN)                      sdbuf_vld;
     reg  `N(`SDBUF_LEN*`XLEN)                sdbuf_instr;
 	reg  `N(`SDBUF_LEN*`XLEN)                sdbuf_pc;
-	reg  `N(`SDBUF_LEN*`FETCH_PARA_LEN)      sdbuf_para;
+	reg  `N(`SDBUF_LEN*`EXEC_PARA_LEN)       sdbuf_para;
 	reg  `N(`SDBUF_LEN*`MMCMB_OFF)           sdbuf_order;
+	reg  `N(`SDBUF_LEN*`JCBUF_OFF)           sdbuf_level;
 	reg  `N(`SDBUF_OFF)                      sdbuf_length;
-    reg  `N(`EXEC_OFF)                       exec_mem_num;
-	reg  `N(`EXEC_OFF)                       exec_rf_num;
-	reg  `N(`RGLEN)                          exec_rd_list;
-	reg  `N(`MMBUF_OFF)                      sdbuf_mem_num;
-	reg                                      sdbuf_has_special;
-	
 
-    genvar i;
-//---------------------------------------------------------------------------
-//statements area
-//---------------------------------------------------------------------------
-
-    //fetch processing
+    reg  `N(`SDBUF_OFF)                      sdexec_mem_num;
+	reg  `N(`RGLEN)                          sdbuf_level_rdlist;
 	
-	wire `N(`SDBUF_LEN) sdbuf_left_vld = ( 1'b1<<(`SDBUF_LEN - sdbuf_length)) - 1'b1;
+	reg  `N(`EXEC_OFF)                       exec_mem_num0;
+	reg  `N(`EXEC_OFF)                       exec_mem_num1;
+	wire `N(`EXEC_OFF)                       exec_mem_num;	
+	reg  `N(`EXEC_OFF)                       exec_alu_num0;
+	reg  `N(`EXEC_OFF)                       exec_alu_num1;	
+	wire `N(`EXEC_OFF)                       exec_alu_num;		
+	reg  `N(`RGBIT)                          exec_check_rdnum0;
+	reg  `N(`RGBIT)                          exec_check_rdnum1;
+	wire `N(`RGBIT)                          exec_check_rdnum;
+	reg  `N(`RGLEN)                          exec_check_rdlist0;
+	reg  `N(`RGLEN)                          exec_check_rdlist1;
+	wire `N(`RGLEN)                          exec_check_rdlist;
+		
+	wire `N(`RGBIT)                          check_num;
+	wire `N(`RGLEN)                          check_rdlist;
 	
-	wire `N(`MMCMB_OFF) fetch_initial_num = membuf_mem_num + sdbuf_mem_num;
+    genvar i,j;
+    //---------------------------------------------------------------------------
+    //statements area
+    //---------------------------------------------------------------------------
 	
-	assign fetch_pick_flag[0]      = 1;
-	assign chain_fetch_offset[0]   = 0;
+    //-------------------------------------------------------------------------------------------
+    //to get order for every instuction: how many MEM instructions exist in membuf and sdbuf.
+	//-------------------------------------------------------------------------------------------
+	
+	assign       chain_order[`IDX(0,`MMCMB_OFF)] = mmbuf_mem_num + sdexec_mem_num;
 	
 	generate
-	for (i=0;i<`FETCH_LEN;i=i+1) begin:gen_fetch
-		wire                       vld = fetch_vld[i] & sdbuf_left_vld[i];
-		wire `N(`XLEN)           instr = fetch_instr[`IDX(i,`XLEN)];
-		wire                       err = fetch_err[i];
-        wire `N(`FETCH_PARA_LEN)  para = rv_dispatch(vld,instr,err);
-		
-		assign fetch_para[`IDX(i,`FETCH_PARA_LEN)] = para;
-	    assign     fetch_order[`IDX(i,`MMCMB_OFF)] = ( ( i==0 ) ? fetch_initial_num : fetch_order[`IDX(i-1,`MMCMB_OFF)] ) + para[1+3*`RGBIT];
-	    assign                fetch_pick_flag[i+1] = fetch_pick_flag[i] & ~(|(para>>`EXEC_PARA_LEN));   
-	    assign             chain_fetch_offset[i+1] = (vld & fetch_pick_flag[i]) ? (i+1) : chain_fetch_offset[i]; 	
+	for (i=0;i<`FETCH_LEN;i=i+1) begin:gen_fetch_order
+	    wire                                 vld = fetch_vld>>i;
+	    wire `N(`EXEC_PARA_LEN)             para = fetch_para>>(i*`EXEC_PARA_LEN);
+		wire                                 mem = para>>(1+3*`RGBIT);
+		assign chain_order[`IDX(i+1,`MMCMB_OFF)] = chain_order[`IDX(i,`MMCMB_OFF)] + (vld&mem);
 	end
 	endgenerate
-
-    wire `N(`FETCH_LEN) fetch_new_vld  = sdbuf_has_special ? 0 : ( fetch_vld & sdbuf_left_vld & fetch_pick_flag[`FETCH_LEN-1:0] );
-
-    assign fetch_offset = sdbuf_has_special ? 0 : chain_fetch_offset[`FETCH_LEN];
-
-    wire `N(`SDBUF_LEN) sdbuf_fetch_vld = fetch_new_vld<<sdbuf_length;
-
-
 	
-    //sdbuf processing	
-
-	always@* begin
-        mem_num[0]         =  membuf_mem_num + exec_mem_num;
-        rf_num[0]          =  mprf_rf_num + exec_rf_num;
-		rs_list[0]         =  membuf_rd_list|exec_rd_list;
-        rd_list[0]         =  membuf_rd_list|exec_rd_list;	
-	    exec_num[0]        =  0;
-		sdbuf_num[0]       =  0;
-		mem_not_exec[0]    =  0;
-	end
+	assign                           fetch_order = chain_order>>`MMCMB_OFF;
 	
-	assign chain_sdbuf_has_special[0]    = 0;
-    assign chain_exec_mem_num[0]         = 0;
-	assign chain_exec_rf_num[0]          = 0;
-	assign chain_exec_rd_list[0]         = 0;
-	assign chain_sdbuf_mem_num[0]        = 0;
-	assign chain_exec_vld[0]             = 0;
-	assign chain_exec_instr[0]           = 0;
-	assign chain_exec_pc[0]              = 0;
-	assign chain_exec_para[0]            = 0;
-	assign chain_exec_order[0]           = 0;
-	assign chain_sdbuf_vld[0]            = 0;
-	assign chain_sdbuf_instr[0]          = 0;
-	assign chain_sdbuf_pc[0]             = 0;
-	assign chain_sdbuf_para[0]           = 0;
-	assign chain_sdbuf_order[0]          = 0;
-	assign chain_find_mem[0]             = 0;
-	assign chain_find_pc[0]              = 0;
+	//-------------------------------------------------------------------------------------------
+	//to evaluate sdbuf
+	//-------------------------------------------------------------------------------------------
+    //to combine incoming instructions and sdbuf instructions.
+	assign                                go_vld = sdbuf_vld|(fetch_vld<<sdbuf_length);
+	assign                              go_instr = sdbuf_instr|(fetch_instr<<(sdbuf_length*`XLEN));
+	assign                                 go_pc = sdbuf_pc|(fetch_pc<<(sdbuf_length*`XLEN));
+	assign                               go_para = sdbuf_para|(fetch_para<<(sdbuf_length*`EXEC_PARA_LEN));
+	assign                              go_order = sdbuf_order|(fetch_order<<(sdbuf_length*`MMCMB_OFF));
+	assign                              go_level = sdbuf_level|(fetch_level<<(sdbuf_length*`JCBUF_OFF));
 
+    assign                       rd_checklist[0] = check_rdlist;
+	assign                       rs_checklist[0] = check_rdlist;
+    assign                         mem_active[0] = {`MMBUF_LEN{1'b1}}>>(mmbuf_mem_num + exec_mem_num);     //membuf left space
+    assign                          rf_active[0] = {`RFBUF_LEN{1'b1}}>>(rfbuf_alu_num + exec_alu_num);     //rfbuf left space
+    assign                        exec_active[0] = {`EXEC_LEN{1'b1}};	
+	assign                           exec_num[0] = 0;
+	assign                          sdbuf_num[0] = 0;
+	
+	assign                  chain_exec_direct[0] = 0;
+	assign                 chain_exec_preload[0] = 0;
+	assign                   chain_exec_instr[0] = 0;
+	assign                      chain_exec_pc[0] = 0;
+	assign                    chain_exec_para[0] = 0;
+	assign                   chain_exec_order[0] = 0;
+	assign                   chain_exec_level[0] = 0;   
+	
+	assign                 chain_sdbuf_direct[0] = 0;
+	assign                chain_sdbuf_preload[0] = 0;
+	assign                  chain_sdbuf_instr[0] = 0;
+	assign                     chain_sdbuf_pc[0] = 0;
+	assign                   chain_sdbuf_para[0] = 0;
+	assign                  chain_sdbuf_order[0] = 0;
+	assign                  chain_sdbuf_level[0] = 0;		
+	
+	assign               chain_sdexec_mem_num[0] = 0;
+	assign           chain_sdbuf_level_rdlist[0] = 0;
+	
+    assign                chain_exec_mem_num0[0] = 0;
+    assign                chain_exec_mem_num1[0] = 0;	
+    assign                chain_exec_alu_num0[0] = 0;
+    assign                chain_exec_alu_num1[0] = 0;	
+    assign                  chain_check_flag0[0] = 0;
+    assign                  chain_check_flag1[0] = 0;	
+    assign                 chain_check_rdnum0[0] = 0;
+    assign                 chain_check_rdnum1[0] = 0;	
+    assign                chain_check_rdlist0[0] = 0;
+    assign                chain_check_rdlist1[0] = 0;		
+	
+	assign                     chain_find_mem[0] = 0;
+	assign                      chain_find_pc[0] = 0;	
 
-    generate
+    generate 
 	for (i=0;i<`SDBUF_LEN;i=i+1) begin:gen_sdbuf
-	    wire special,mem,alu;
-		wire `N(`RGBIT) rd,rs1,rs0;
-		wire                                buffer = sdbuf_vld[i];
-		wire                                 fetch = sdbuf_fetch_vld[i];
-		wire `N(`SDBUF_OFF)                  count = (i<sdbuf_length) ? i : ( i-sdbuf_length );
-		wire `N(`XLEN)                       instr = (i<sdbuf_length) ? ( sdbuf_instr>>(count*`XLEN) ) : ( fetch_instr>>(count*`XLEN) );
-		wire `N(`XLEN)                          pc = (i<sdbuf_length) ? ( sdbuf_pc>>(count*`XLEN) ) : ( fetch_pc>>(count*`XLEN) );
-		wire `N(`FETCH_PARA_LEN)              para = (i<sdbuf_length) ? ( sdbuf_para>>(count*`FETCH_PARA_LEN) ) : ( fetch_para>>(count*`FETCH_PARA_LEN) );
-		wire `N(`MMCMB_OFF)                  order = (i<sdbuf_length) ? ( sdbuf_order>>(count*`MMCMB_OFF) ) : ( fetch_order>>(count*`MMCMB_OFF) );
-		wire                                   vld = buffer|fetch;
-		assign                             special = vld & (|(para>>`EXEC_PARA_LEN));
-		assign                {mem,alu,rd,rs1,rs0} = vld ? para : 0;
-		
-		wire                                   hit = ( |( rs_list[i]&( ((1'b1<<rs0)|(1'b1<<rs1))>>1 ) ) )|( |( rd_list[i]&( (1'b1<<rd)>>1 ) ) );
-		
-	    always @( mem_num[i],rf_num[i],rs_list[i],rd_list[i],exec_num[i],sdbuf_num[i],mem_not_exec[i],mem,hit,rd,rs0,rs1,alu,special)
-		begin
-		    mem_num[i+1]       = mem_num[i];
-			rf_num[i+1]        = rf_num[i];
-			rs_list[i+1]       = rs_list[i];
-			rd_list[i+1]       = rd_list[i];
-		    exec_num[i+1]      = exec_num[i];
-			sdbuf_num[i+1]     = sdbuf_num[i];
-			mem_not_exec[i+1]  = mem_not_exec[i];
-			go_exec[i]         = `EXEC_LEN;
-			go_sdbuf[i]        = `SDBUF_LEN;
-			
-			if ( mem & ~special ) begin
-			    if ( hit|mem_not_exec[i]|(exec_num[i]==`EXEC_LEN)|(mem_num[i]==`MMBUF_LEN) ) begin
-				    go_sdbuf[i]       = sdbuf_num[i];
-					sdbuf_num[i+1]    = sdbuf_num[i] + 1'b1;
-					mem_not_exec[i+1] = 1;
-					rs_list[i+1]      = rs_list[i]|( (1'b1<<rd)>>1 );
-					rd_list[i+1]      = rd_list[i]|( ((1'b1<<rd)|(1'b1<<rs0)|(1'b1<<rs1))>>1 );
-				end else begin
-				    go_exec[i]        = exec_num[i];
-					exec_num[i+1]     = (exec_num[i]==`EXEC_LEN) ? `EXEC_LEN : ( exec_num[i] + 1'b1 );
-					mem_num[i+1]      = (mem_num[i]==`MMBUF_LEN) ? `MMBUF_LEN : ( mem_num[i] + 1'b1 );
-					rs_list[i+1]      = rs_list[i]|( (1'b1<<rd)>>1 );
-					rd_list[i+1]      = rd_list[i]|( (1'b1<<rd)>>1 );					
-				end
-			end
-			
-			if ( alu & (rd!=0) & ~special ) begin
-				if ( hit|(exec_num[i]==`EXEC_LEN)|(rf_num[i]==`RFBUF_LEN) ) begin
-				    go_sdbuf[i]      = sdbuf_num[i];
-					sdbuf_num[i+1]   = sdbuf_num[i] + 1'b1;
-					rf_num[i+1]      = (rf_num[i]==`RFBUF_LEN) ? `RFBUF_LEN : ( rf_num[i] + 1'b1 ); //add this to keep every skipped OP has its seat in RFBUF.
-					rs_list[i+1]     = rs_list[i]|( (1'b1<<rd)>>1 );
-					rd_list[i+1]     = rd_list[i]|( ((1'b1<<rd)|(1'b1<<rs0)|(1'b1<<rs1))>>1 );
-				end else begin
-				    go_exec[i]       = exec_num[i];
-					exec_num[i+1]    = (exec_num[i]==`EXEC_LEN) ? `EXEC_LEN : ( exec_num[i] + 1'b1 );
-					rf_num[i+1]      = (rf_num[i]==`RFBUF_LEN) ? `RFBUF_LEN : ( rf_num[i] + 1'b1 );
-					rs_list[i+1]     = rs_list[i]|( (1'b1<<rd)>>1 );
-				end
-			end
-			
-            if ( special ) begin
-                if ( hit|(exec_num[i]==`EXEC_LEN)|((rd!=0)&(rf_num[i]==`RFBUF_LEN))|( (|(para>>(`EXEC_PARA_LEN+3))) & ~((i==0) & (order==1)) ) ) begin
-				    go_sdbuf[i]      = sdbuf_num[i];
-					sdbuf_num[i+1]   = sdbuf_num[i] + 1'b1;
-                end else begin
-				    go_exec[i]       = `EXEC_LEN - 1'b1;
-				end
-			end
-	    end		
-		
-		wire `N(`MMCMB_OFF) order_out = get_order(order,mem_release);		
-		
-		wire vld_out = clear_pipeline ? ( ~(fetch|(order_out!=0)|special) ) : ( jump_vld ? (~fetch) : 1'b1 );
+	    //basic info
+		wire `N(`XLEN)                     instr = go_instr>>(i*`XLEN);
+		wire `N(`XLEN)                        pc = go_pc>>(i*`XLEN);
+		wire `N(`EXEC_PARA_LEN)             para = go_para>>(i*`EXEC_PARA_LEN);
+		wire                                 mem = para>>(1+3*`RGBIT);
+		wire                                 alu = para>>(3*`RGBIT);
+		wire `N(`RGBIT)                      rs0 = para;
+		wire `N(`RGBIT)                      rs1 = para>>`RGBIT;
+		wire `N(`RGBIT)                       rd = para>>(2*`RGBIT);
+		wire `N(`MMCMB_OFF)                order = go_order>>(i*`MMCMB_OFF);
+		wire `N(`MMCMB_OFF)               orderx = sub_order(order,mem_release);	
+        wire `N(`JCBUF_OFF)                level = go_level>>(i*`JCBUF_OFF);		
+		wire `N(`JCBUF_OFF)               levelx = sub_level(level,level_decrease);
+		wire                          level_zero = (level==0)|((level==1)&level_decrease);
 
-        assign chain_sdbuf_has_special[i+1] = chain_sdbuf_has_special[i]|( vld_out&special&(go_sdbuf[i]!=`SDBUF_LEN) );
-		assign chain_sdbuf_mem_num[i+1]     = chain_sdbuf_mem_num[i] + (vld_out&mem);		
-		assign chain_exec_mem_num[i+1]      = (go_exec[i]!=`EXEC_LEN) ? ( chain_exec_mem_num[i] + (vld_out&mem) ) : chain_exec_mem_num[i];
-		assign chain_exec_rf_num[i+1]       = (go_exec[i]!=`EXEC_LEN) ? ( chain_exec_rf_num[i] + (vld_out&alu&(rd!=0)) ) : chain_exec_rf_num[i];
-		assign chain_exec_rd_list[i+1]      = ( (go_exec[i]!=`EXEC_LEN) & vld_out & mem ) ? ( chain_exec_rd_list[i]|( (1'b1<<rd)>>1) ) : chain_exec_rd_list[i];
+        wire                           exec_idle = exec_active[i];
+		wire                            mem_idle = mem_active[i];
+		wire                             rf_idle = rf_active[i];
+		wire                              rg_hit = check_both(para,rd_checklist[i],rs_checklist[i]);
 		
-		assign chain_exec_vld[i+1]          = chain_exec_vld[i]|(vld_out<<go_exec[i]); 
-		assign chain_exec_instr[i+1]        = chain_exec_instr[i]|(instr<<(go_exec[i]*`XLEN));
-		assign chain_exec_pc[i+1]           = chain_exec_pc[i]|(pc<<(go_exec[i]*`XLEN));
-		assign chain_exec_para[i+1]         = chain_exec_para[i]|(para<<(go_exec[i]*`FETCH_PARA_LEN));
-		assign chain_exec_order[i+1]        = chain_exec_order[i]|(order_out<<(go_exec[i]*`MMCMB_OFF));
+		assign                         go_hit[i] = rg_hit|(~exec_idle)|(mem & ~mem_idle)|(alu & ~rf_idle);
+		assign                     go_preload[i] = check_gray(para,check_num);
 		
-		assign chain_sdbuf_vld[i+1]         = chain_sdbuf_vld[i]|(vld_out<<go_sdbuf[i]);
-		assign chain_sdbuf_instr[i+1]       = chain_sdbuf_instr[i]|(instr<<(go_sdbuf[i]*`XLEN));
-		assign chain_sdbuf_pc[i+1]          = chain_sdbuf_pc[i]|(pc<<(go_sdbuf[i]*`XLEN));
-		assign chain_sdbuf_para[i+1]        = chain_sdbuf_para[i]|(para<<(go_sdbuf[i]*`FETCH_PARA_LEN));
-		assign chain_sdbuf_order[i+1]       = chain_sdbuf_order[i]|(order_out<<(go_sdbuf[i]*`MMCMB_OFF));
+		wire                            alu2exec = alu & go_vld[i] & ~go_hit[i];
+		wire                           alu2sdbuf = alu & go_vld[i] & (go_hit[i]|go_preload[i]);
+		wire                            mem2exec = mem & go_vld[i] & ~go_hit[i];
+		wire                           mem2sdbuf = mem & go_vld[i] & (go_hit[i]|go_preload[i]);
 		
-		assign chain_find_mem[i+1]          = chain_find_mem[i]|( buffer & (mem|special) );
-		assign chain_find_pc[i+1]           = chain_find_mem[i] ? chain_find_pc[i] : pc;		
-	end
-	endgenerate
-	
-	`FFx(sdbuf_has_special,0)
-	sdbuf_has_special <= chain_sdbuf_has_special[`SDBUF_LEN];
+        //variable update
+        assign                 rd_checklist[i+1] = rd_checklist[i]|(alu2sdbuf<<rd)|(alu2sdbuf<<rs0)|(alu2sdbuf<<rs1)|(mem2exec<<rd)|(mem2sdbuf<<rd)|(mem2sdbuf<<rs0)|(mem2sdbuf<<rs1);
+        assign                 rs_checklist[i+1] = rs_checklist[i]|(alu2exec<<rd)|(alu2sdbuf<<rd)|(mem2exec<<rd)|(mem2sdbuf<<rd);		
+        assign                  exec_active[i+1] = exec_active[i]>>( alu2exec|mem2exec );
+		assign                   mem_active[i+1] = mem2sdbuf ? 0 : (mem_active[i]>>mem2exec);
+		assign                    rf_active[i+1] = rf_active[i]>>( alu2exec|alu2sdbuf );
+		assign                     exec_num[i+1] = exec_num[i] + ( alu2exec|mem2exec );
+		assign                    sdbuf_num[i+1] = sdbuf_num[i] + ( alu2sdbuf|mem2sdbuf );
 
-    `FFx(exec_mem_num,0)
-	exec_mem_num <= chain_exec_mem_num[`SDBUF_LEN];
+        //clear is a flag to signal this instruction is invalid.		
+		wire                               clear = (alu & (rd==0))|( clear_pipeline &  ~((orderx==0)&(level==0)) )|( level_clear & (level!=0) );	
+        
+		//special instruction should be assigned to the last exec ALU.
+        wire `N(`EXEC_OFF)            exec_shift = ( alu2exec|mem2exec ) ?  exec_num[i] : `EXEC_LEN;
+
+		assign            chain_exec_direct[i+1] = chain_exec_direct[i]|( ((clear|go_preload[i]) ? 1'b0 : 1'b1)<<exec_shift );
+        assign           chain_exec_preload[i+1] = chain_exec_preload[i]|( ( clear ? 1'b0 : go_preload[i] )<<exec_shift );	
+		assign             chain_exec_instr[i+1] = chain_exec_instr[i]|( instr<<(exec_shift*`XLEN) );
+		assign                chain_exec_pc[i+1] = chain_exec_pc[i]|( pc<<(exec_shift*`XLEN) );
+		assign              chain_exec_para[i+1] = chain_exec_para[i]|( para<<(exec_shift*`EXEC_PARA_LEN) );
+		assign             chain_exec_order[i+1] = chain_exec_order[i]|( orderx<<(exec_shift*`MMCMB_OFF) );
+		assign             chain_exec_level[i+1] = chain_exec_level[i]|( levelx<<(exec_shift*`JCBUF_OFF) );	
+		
+		wire `N(`SDBUF_OFF)          sdbuf_shift = ( alu2sdbuf|mem2sdbuf ) ? sdbuf_num[i] : `SDBUF_LEN;
+		
+		assign           chain_sdbuf_direct[i+1] = chain_sdbuf_direct[i]|( (clear ? 1'b0 : go_hit[i])<<sdbuf_shift );
+		assign          chain_sdbuf_preload[i+1] = chain_sdbuf_preload[i]|( ((clear|go_hit[i]) ? 1'b0 : 1'b1)<<sdbuf_shift );
+		assign            chain_sdbuf_instr[i+1] = chain_sdbuf_instr[i]|( instr<<(sdbuf_shift*`XLEN) );
+		assign               chain_sdbuf_pc[i+1] = chain_sdbuf_pc[i]|( pc<<(sdbuf_shift*`XLEN) );
+		assign             chain_sdbuf_para[i+1] = chain_sdbuf_para[i]|(para<<(sdbuf_shift*`EXEC_PARA_LEN));
+		assign            chain_sdbuf_order[i+1] = chain_sdbuf_order[i]|(orderx<<(sdbuf_shift*`MMCMB_OFF));
+        assign            chain_sdbuf_level[i+1] = chain_sdbuf_level[i]|(levelx<<(sdbuf_shift*`JCBUF_OFF));	
+
+        assign         chain_sdexec_mem_num[i+1] = chain_sdexec_mem_num[i] + ( go_vld[i] & mem & ~clear );
+		assign     chain_sdbuf_level_rdlist[i+1] = chain_sdbuf_level_rdlist[i]|( ( go_vld[i] & level_zero & ~clear )<<rd );		
+		
+		wire                 mem_exclude_preload = mem2exec & ~go_preload[i] & ~clear;		
+		wire                 mem_include_preload = mem2exec & ~clear;
+		wire                 alu_exclude_preload = alu2exec & ~go_preload[i] & ~clear;			
+		wire                 alu_include_preload = alu2exec & ~clear;	
+		
+        assign          chain_exec_mem_num0[i+1] = chain_exec_mem_num0[i] + mem_exclude_preload;
+		assign          chain_exec_mem_num1[i+1] = chain_exec_mem_num1[i] + mem_include_preload;
+        assign          chain_exec_alu_num0[i+1] = chain_exec_alu_num0[i] + alu_exclude_preload;
+		assign          chain_exec_alu_num1[i+1] = chain_exec_alu_num1[i] + alu_include_preload;
+		assign            chain_check_flag0[i+1] = chain_check_flag0[i]|mem_exclude_preload;
+		assign            chain_check_flag1[i+1] = chain_check_flag1[i]|mem_include_preload;
+		assign           chain_check_rdnum0[i+1] = ( ~chain_check_flag0[i] & mem_exclude_preload ) ? rd : chain_check_rdnum0[i];
+		assign           chain_check_rdnum1[i+1] = ( ~chain_check_flag1[i] & mem_include_preload ) ? rd : chain_check_rdnum1[i];	
+		assign          chain_check_rdlist0[i+1] = chain_check_rdlist0[i]|( ( chain_check_flag0[i]&mem_exclude_preload )<<rd );
+		assign          chain_check_rdlist1[i+1] = chain_check_rdlist1[i]|( ( chain_check_flag1[i]&mem_include_preload )<<rd );
+		
+		assign               chain_find_mem[i+1] = chain_find_mem[i]|( go_vld[i] & mem & (levelx==0) );
+		assign                chain_find_pc[i+1] = chain_find_mem[i] ? chain_find_pc[i] : pc;			
+		
+    end
+	endgenerate		
+
 	
-	`FFx(exec_rf_num,0)
-	exec_rf_num <= chain_exec_rf_num[`SDBUF_LEN];
+	`FFx(exec_direct,0)
+	exec_direct <= chain_exec_direct[`SDBUF_LEN];
 	
-	`FFx(exec_rd_list,0)
-	exec_rd_list <= chain_exec_rd_list[`SDBUF_LEN];
+	`FFx(exec_preload,0)
+	exec_preload <= chain_exec_preload[`SDBUF_LEN];
 	
-	`FFx(sdbuf_mem_num,0)
-	sdbuf_mem_num <= chain_sdbuf_mem_num[`SDBUF_LEN];	
-	
-	`FFx(exec_vld,0)
-	exec_vld <= chain_exec_vld[`SDBUF_LEN];
+	assign exec_vld = exec_direct|( exec_preload & {`EXEC_LEN{mem_release} } );
 	
 	`FFx(exec_instr,0)
 	exec_instr <= chain_exec_instr[`SDBUF_LEN];
@@ -286,23 +352,24 @@ module schedule(
 	`FFx(exec_pc,0)
 	exec_pc <= chain_exec_pc[`SDBUF_LEN];
 	
- 	generate  
-	for (i=0;i<`EXEC_LEN;i=i+1) begin:gen_exec_para
-	    if (i==(`EXEC_LEN-1)) begin
-		    `FFx(exec_para[i*`EXEC_PARA_LEN+:`FETCH_PARA_LEN],0)
-	        exec_para[i*`EXEC_PARA_LEN+:`FETCH_PARA_LEN] <= chain_exec_para[`SDBUF_LEN]>>(i*`FETCH_PARA_LEN);
-		end else begin
-		    `FFx(exec_para[`IDX(i,`EXEC_PARA_LEN)],0)
-			exec_para[`IDX(i,`EXEC_PARA_LEN)] <= chain_exec_para[`SDBUF_LEN]>>(i*`FETCH_PARA_LEN);
-		end
-	end
-	endgenerate
+	`FFx(exec_para,0)
+	exec_para <= chain_exec_para[`SDBUF_LEN];
 	
 	`FFx(exec_order,0)
 	exec_order <= chain_exec_order[`SDBUF_LEN];
 	
-	`FFx(sdbuf_vld,0)
-	sdbuf_vld <= chain_sdbuf_vld[`SDBUF_LEN];
+	`FFx(exec_level,0)
+	exec_level <= chain_exec_level[`SDBUF_LEN];
+
+ 
+ 
+	`FFx(sdbuf_direct,0)
+	sdbuf_direct <= chain_sdbuf_direct[`SDBUF_LEN];
+
+	`FFx(sdbuf_preload,0)
+	sdbuf_preload <= chain_sdbuf_preload[`SDBUF_LEN];
+
+    assign sdbuf_vld = sdbuf_direct|( sdbuf_preload & ( mem_release ? 0 : {`SDBUF_LEN{1'b1}} ) );
 	
 	`FFx(sdbuf_instr,0)
 	sdbuf_instr <= chain_sdbuf_instr[`SDBUF_LEN];
@@ -316,11 +383,60 @@ module schedule(
 	`FFx(sdbuf_order,0)
 	sdbuf_order <= chain_sdbuf_order[`SDBUF_LEN];
 	
+	`FFx(sdbuf_level,0)
+	sdbuf_level <= chain_sdbuf_level[`SDBUF_LEN];
+	
 	`FFx(sdbuf_length,0)
 	sdbuf_length <= sdbuf_num[`SDBUF_LEN];
-
-    assign schedule_int_pc = chain_find_mem[`SDBUF_LEN] ? chain_find_pc[`SDBUF_LEN] : ( jump_vld ? jump_pc : fetch_pc);
 	
+	
+    `FFx(sdexec_mem_num,0)
+    sdexec_mem_num <= chain_sdexec_mem_num[`SDBUF_LEN];
+  
+ 	`FFx(sdbuf_level_rdlist,0)
+	sdbuf_level_rdlist <= chain_sdbuf_level_rdlist[`SDBUF_LEN]; 
+	
+    `FFx(exec_mem_num0,0)
+    exec_mem_num0 <= chain_exec_mem_num0[`SDBUF_LEN];
+	
+    `FFx(exec_mem_num1,0)
+    exec_mem_num1 <= chain_exec_mem_num1[`SDBUF_LEN];	
+	
+	assign exec_mem_num = mem_release ? exec_mem_num1 : exec_mem_num0;
+ 
+    `FFx(exec_alu_num0,0)
+    exec_alu_num0 <= chain_exec_alu_num0[`SDBUF_LEN];	
+	
+    `FFx(exec_alu_num1,0)
+    exec_alu_num1 <= chain_exec_alu_num1[`SDBUF_LEN];		
+	
+	assign exec_alu_num = mem_release ? exec_alu_num1 : exec_alu_num0;
+	
+	`FFx(exec_check_rdnum0,0)
+	exec_check_rdnum0 <= chain_check_rdnum0[`SDBUF_LEN];	
+	
+	`FFx(exec_check_rdnum1,0)
+	exec_check_rdnum1 <= chain_check_rdnum1[`SDBUF_LEN];		
+	
+	assign exec_check_rdnum = mem_release ? exec_check_rdnum1 : exec_check_rdnum0;
+	
+	`FFx(exec_check_rdlist0,0)
+	exec_check_rdlist0 <= chain_check_rdlist0[`SDBUF_LEN];	
+	
+	`FFx(exec_check_rdlist1,0)
+	exec_check_rdlist1 <= chain_check_rdlist1[`SDBUF_LEN];		
+	
+	assign exec_check_rdlist = mem_release ? exec_check_rdlist1 : exec_check_rdlist0;	
+	
+	assign check_num = mmbuf_check_flag ? mmbuf_check_rdnum : exec_check_rdnum;
+	
+	assign check_rdlist = mmbuf_check_rdlist|( mmbuf_check_flag ? ( 1'b1<<exec_check_rdnum ) : 0 )|exec_check_rdlist;
+	
+	assign                           sdbuf_left_num = `SDBUF_LEN - sdbuf_length;
+	assign                    pipeline_level_rdlist = mmbuf_level_rdlist|sdbuf_level_rdlist;
+	assign                        pipeline_is_empty = (mmbuf_mem_num==0)&(rfbuf_alu_num==0)&(sdbuf_length==0)&(exec_direct==0);
+    assign                             schd_intflag = chain_find_mem[`SDBUF_LEN];
+    assign                               schd_intpc = chain_find_mem[`SDBUF_LEN] ? chain_find_pc[`SDBUF_LEN] : fetch_pc;
 
 endmodule
 

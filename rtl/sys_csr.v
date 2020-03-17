@@ -17,22 +17,29 @@
 /////////////////////////////////////////////////////////////////////////////////////
 
 `include "define.v"
-module sys_csr(
+module sys_csr
+#(
+    parameter START_ADDR = 'h200
+)
+(
     input                                clk,
 	input                                rst,
 	
     input                                sys_vld,
     input  `N(`XLEN)                     sys_instr,
 	input  `N(`XLEN)                     sys_pc,
-    input  `N(`FETCH_PARA_LEN-`EXEC_PARA_LEN-3) sys_extra_para,
+	input  `N(4)                         sys_para,
+	
+	input                                csr_vld,
+	input  `N(`XLEN)                     csr_instr,
     input  `N(`XLEN)                     csr_rs,
 	output `N(`XLEN)                     csr_data,
 	
-	input                                dmem_exception,
-	input `N(`XLEN)                      int_pc,
+	input  `N(2)                         dmem_exception,
+	input  `N(`XLEN)                     int_pc,
+	input                                mem_busy,
 	
 	output                               clear_pipeline,
-
 	output                               jump_vld,
 	output reg `N(`XLEN)                 jump_pc
 	
@@ -40,7 +47,7 @@ module sys_csr(
 
 	//csr function
 	
-	wire `N(12) csr_addr = sys_instr[31:20];
+	wire `N(12) csr_addr = csr_instr[31:20];
 	
 	localparam ADDR_MHARTID = 12'hf14,
 	           ADDR_MTVEC   = 12'h305,
@@ -58,17 +65,16 @@ module sys_csr(
     reg `N(`XLEN) csr_out;	
 	reg `N(`XLEN) csr_in;
 	
-	wire csr_vld = sys_vld & (sys_extra_para==0); 
-	wire `N(3)  csr_func = sys_instr[14:12];
+	wire `N(3)  csr_func = csr_instr[14:12];
 	
 	`COMB
 	case(csr_func)
 	3'b001 : csr_in = csr_rs;
 	3'b010 : csr_in = csr_rs|csr_out;
 	3'b011 : csr_in = (~csr_rs)&csr_out;
-	3'b101 : csr_in = sys_instr[19:15];
-	3'b110 : csr_in = sys_instr[19:15]|csr_out;
-	3'b111 : csr_in = (~sys_instr[19:15])&csr_out;
+	3'b101 : csr_in = csr_instr[19:15];
+	3'b110 : csr_in = csr_instr[19:15]|csr_out;
+	3'b111 : csr_in = (~csr_instr[19:15])&csr_out;
 	default : csr_in = csr_out;
 	endcase
 	
@@ -124,17 +130,22 @@ module sys_csr(
 	
 	
 
-	wire instr_is_ret    = sys_vld & ((sys_extra_para>>3)==0) & ( (sys_instr[31:0]==32'b0000000_00010_00000_000_00000_1110011)|(sys_instr[31:0]==32'b0001000_00010_00000_000_00000_1110011)|(sys_instr[31:0]==32'b0011000_00010_00000_000_00000_1110011) );
-	wire instr_is_ecall  = sys_vld & ((sys_extra_para>>3)==0) & (sys_instr[31:0]==32'b0000000_00000_00000_000_00000_1110011);
-	wire instr_is_fencei = sys_vld & ((sys_extra_para>>3)==0) & (sys_instr[31:0]==32'b0000000_00000_00000_001_00000_0001111);
+	wire instr_is_ret    = sys_vld & ((sys_para>>2)==0) & ( (sys_instr[31:0]==32'b0000000_00010_00000_000_00000_1110011)|(sys_instr[31:0]==32'b0001000_00010_00000_000_00000_1110011)|(sys_instr[31:0]==32'b0011000_00010_00000_000_00000_1110011) );
+	wire instr_is_ecall  = sys_vld & ((sys_para>>2)==0) & (sys_instr[31:0]==32'b0000000_00000_00000_000_00000_1110011);
+	wire instr_is_fencei = sys_vld & ((sys_para>>2)==0) & (sys_instr[31:0]==32'b0000000_00000_00000_001_00000_0001111);
 	
-	assign clear_pipeline = 1'b0;
+	reg reset_state;
+	`FFx(reset_state,1'b1)
+	reset_state <= 1'b0;	
 	
-	assign jump_vld = (instr_is_ret|instr_is_ecall|instr_is_fencei);
+	assign jump_vld = reset_state|(instr_is_ret|instr_is_ecall|instr_is_fencei);
 	
+    assign clear_pipeline = jump_vld;
 
     `COMB
-	if ( instr_is_ret )
+	if ( reset_state )
+	    jump_pc = START_ADDR;
+	else if ( instr_is_ret )
 	    jump_pc = data_mepc;
 	else if ( instr_is_ecall )
 	    jump_pc = data_mtvec;

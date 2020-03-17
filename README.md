@@ -1,117 +1,104 @@
 # SuperScalar-RISCV-CPU
-super-scalar out-of-order rv32imc cpu core, 4+ DMIPS/MHz(best performance) 2+ DMIPS/MHz(with noinline option)
 
-A tutorial on SSRV is here: [tutorial](https://risclite.github.io/)------------Chinese version : [中文教程](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/中文帮助维基).
-
-Add FPGA implementation of SSRV: [FPGA implementaion](/ssrv-on-scr1)
+SSRV(Super-Scalar RISC-V) --- Super-scalar out-of-order RV32IMC CPU core,  performance: 6.0 CoreMark/MHz.
 
 ## Overview ##
 
-SSRV (SuperScalar RISC-V) is an open-source RV32IMC core, which is superscalar and out-of-order. It is synthesizable  and parameterizable. It is very flexible to customize different performance.
+SSRV is an open-source RV32IMC CPU core. It is synthesizable and parameterizable. You can define different configuration scheme to get different performance,  which ranges within 2.9 ~6.4 CoreMark/MHz, 2.6~4.9 DMIPS/MHz(best) and 1.5~2.8 DMIPS/MHz(legal). The recommended configuration scheme of 6.0 CoreMark/MHz could have Fmax: 30MHz on an Intel DE2-115 FPGA board. 
 
+## Feature ##
 
-## Principle ##
+* Configurable 4 to 5 stage pipeline implementation
 
-SSRV is a 3-stage RV32IMC CPU core. Different from rivals, SSRV is configurable to adjust levels of out-of-order and super-scalar via 3 parameters. Besides these 3 ones, there are more parameters to effect performance.
+* 4 chained parameterized buffers, configurable sizes and ports
 
-SSRV is based on 4 different multiple-in, multiple-out buffers connected with each other. The central of them is built in “schedule” module, which has “FETCH_LEN” inputs, “EXEC_LEN” outputs and a capacity of “SDBUF_LEN” instructions.
+* Its instruction set is RV32IMC.
+
+* Synthesizable verilog description.
 
 ![diagram](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/diagram.png)
 
-If these 3 parameters are given different values, this core will show different Dhrystone Benchmark scores. The next table will list how these key parameters produce different performance cores.
+To define 4 chained buffers is an easy way to get a configuration scheme, which accommodates instructions in flight. Let's set N as a number of instruction parallelism. The below lists give each buffer these parameters as "input size, capacity size, output size".
 
-|FETCH_LEN--SDBUF_LEN--EXEC_LEN |	DHRY(best) |	DMIPS/MHz(best) |	DHRY(legal) |	DMIPS/MHz(legal)   |
-|-------------------------------|------------|------------------|-------------|--------------------|
-|1—1—1                          |5205	       |2.96              |2645	        |1.51                |
-|1—2—1 	                        |5205	       |2.96	            |2659	        |1.51                |
-|2—2—2 	                        |6366	       |3.62	            |3344	        |1.90                |
-|2—3—2	                        |6407	       |3.65	            |3471	        |1.98                |
-|2—4—2	                        |6407	       |3.65	            |3520	        |2.00                |
-|2—6—2	                        |6407	       |3.65	            |3533	        |2.01                |
-|3—3—3	                        |6708	       |3.82	            |3689	        |2.10                |
-|3—4—3	                        |6753	       |3.84	            |3758	        |2.14                |
-|3—6—3	                        |6799	       |3.87	            |3787	        |2.16                |
-|4—4—4	                        |6893	       |3.92	            |3758	        |2.14                |
-|4—5—4	                        |6941	       |3.95	            |3801	        |2.16                |
-|4—6—4	                        |6941	       |3.95	            |3816	        |2.17                |
-|8—16—8	                        |7038	       |4.01	            |3906	        |2.22                |
-|16—32—16	                      |7038	       |4.01	            |3921	        |2.23                |
+* The instrbits buffer: N*32 bits,  3*N*32 bits, N instr(Only output is indentified as instr)
 
-“EXEC_LEN” is a parameter of super-scalar, which determines how many ALUs are instantiated to execute instructions in the same cycle. “SDBUF_LEN” is a parameter of out-of-order, which means how many instructions are evaluated to present “EXEC_LEN” instructions, the bigger it is, the more possibility to stuff ALUs. 
+* The schedule buffer: N instr, 2*N instr, N instr(means N ALUs)
 
-More than that, these 3 parameters can be random integer. There is a status report when all are assigned to 16. It is obvious that SSRV is a robust solution of out-of-order and super scalar.
-
-    ticks =      261273  instructions =      282644  I/T = 1.081796
-          NUM          TICKS       RATIO
-            0 --       87638 -- 0.335427 
-            1 --      108594 -- 0.415634 
-            2 --       37830 -- 0.144791 
-            3 --       19693 -- 0.075373 
-            4 --        3562 -- 0.013633 
-            5 --        1793 -- 0.006863 
-            6 --         949 -- 0.003632 
-            7 --         566 -- 0.002166 
-            8 --         110 -- 0.000421 
-            9 --          58 -- 0.000222 
-           10 --         360 -- 0.001378 
-           11 --          88 -- 0.000337 
-           12 --           0 -- 0.000000 
-           13 --          12 -- 0.000046 
-           14 --           0 -- 0.000000 
-           15 --           4 -- 0.000015 
-           16 --          16 -- 0.000061 
-
-All files of SSRV are synthesizable and aimed to provide a high-performance core for ASIC and FPGA. Except for a file “sys_csr.v”, which is related to interrupt/exception and system control, others could be unmodified to be instantiated as sub-modules.
-
-If you want to utilize SSRV to build a high-performance CPU core of your own, just modify “sys_csr.v” to have your own system control solution and combine that with other files to be your high-performance core. You are free to choose appropriate parameters, which will give your balance between performance and logic cell cost.
-
-
-
-## Benchmark ##
-
-This project is inspired and based on Syntacore's core: [SCR1](https://github.com/syntacore/scr1). Syntacore supplies "riscv_isa", "riscv_compliance", "coremark" and "dhrystone21" simulation tests. So, the basic benchmark scores could be listed here:
-
-|EXEC_LEN       | Best performance(DMIPS/MHz) | -O3 -noinline Option(DMIPS/MHz) |
-| ------------- | --------------------------- | ------------------------------- |
-|1              |2.96                         | 1.51                            |
-|2              |3.65                         | 2.00                            |
-|3              |3.87                         | 2.10                            |
-|4              |3.95                         | 2.18                            |
-
+* The membuf buffer: N instr, 2*N instr, 1 instr(fixed, only one data memory interface)
+	
+* The mprf buffer: N instr, 2*N instr, N instr
+	
+|N            |	CoreMark ticks |CoreMark/MHz(estimated) |	DMIPS/MHz(best) |	DMIPS/MHz(legal)   |
+|-------------|----------------|------------------------|-------------------|----------------------|
+|    16       | 1567           |  6.38                  |    4.94           | 2.82                 |
+|     8       | 1583           |  6.32                  |    4.94           | 2.79                 |
+|     4       | 1646           |  6.08                  |    4.82           | 2.75                 |
+|     2       | 2072           |  4.83                  |    4.24           | 2.39                 |
+|     1       | 3452           |  2.90                  |    2.67           | 1.48                 |
 
 --RISCV gcc version: 8.3.0 
 --RV32IMC
 
-## SSRV-ON-SCR1 ##
+## Structure ##
 
-SSRV is a main framework to build a high performance CPU core. If it is connected with system control units as the same as peripherals, it will provide the high-performance attribute for different CPU cores.
- 
-Since the simulation environment is inherited from SCR1, it is very convenient to instantiate SSRV into SCR1 to improve instruction throughput ability. SSRV will replace the basic instruction processing modules.  All instructions will be dealt with except system and CSR instructions, which will be forwarded to SCR1’s system and CSR module: scr1_pipe_csr.sv.
+SSRV is inspired by and based on [SCR1](https://github.com/syntacore/scr1) of Syntacore. If you need a total solution to simulation and development, you should download the package of SCR1.
 
-![ssrv-on-scr1](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/ssrv-on-scr1.png)
+    rtl/ ------------------------ the core verilog RTL code    
+        ssrv_top.v     ------------------------Top level
+          |---- instrman.v
+          |---- instrbits.v
+          |---- predictor.v
+          |---- schedule.v
+          |---- alu.v
+          |---- mprf.v
+          |---- membuf.v
+          |---- mul.v
+          |---- sys_csr.v
+        
+        define.v       ------------------------ the defination verilog file
+        define_para.v  ------------------------ project parameter verilog file
+        include_func.v ------------------------ common function verilog file
 
-SSRV and "scr1_pipe_csr" constitute a new basic hierarchy level: "pipeline". The "pipeline" level could be instantiated by the upper level: "core", which has an accessorial module: "scr1_reset_cells". The top hierarchy level adds more functions: 64KB TCM, a 64-bit timer and AXI4/AHB-lite bus interfaces.
+    scr1/  ------------------------ the scr1 modified code and simulation starting directory.
+      |---build/    ------------------------ compiled test hex/elf/dump files. The file "test_info" is a list of these test cases.
+      |---src/      ------------------------ The original RTL and testbench files of SCR1. Some of these files are modified to accept SSRV.
+      |---sim/      ------------------------ Simulation starting directory. Mentor Modelsim/QuestaSim could evoke two .do files: compile.do and sim.do. Other simulators will have to regard "compile.do" as a file list of all needed files.
 
-Compared with the original SCR1 core, the DHRY score will be improved from 1.14 DMIPS/MHz to 1.87 DMIPS/MHz. Unfortunately, the instruction bus width is fixed to 32 bits by SCR1, which is a limitation of performance. It is obvious that SSRV could not issue 2 or 3 instructions simultaneously when only 1 instruction is fetched from the source memory.
+    ssrv-on-scr1/   ------------------------  A FPGA implementation of SSRV based on SCR1
+       |--- fpga/   ------------------------  A Quartus project files on the DE2-115 development kit.
+       |--- sim/    ------------------------  A simulation package on this FPGA implementation.
 
-The directory "ssrv-on-scr1" is on the subject of this SSRV CPU core based on SCR1.
+    testbench
+       |--- tb_ssrv.v ------------------------ A testbench file to instantiate SSRV.
 
-## Status ##
+## Simulation ##
 
-SSRV cpu core is online. It could be fitted into FPGA board.
+Go to the directory: "scr1/sim/". Two .do files: "compile.do" and "sim.do" could be evoked by Modelsim/QuestaSim directly. If you use the other simulator, please open compile.do and get the file list of the whole files. Compile them and have a run.
 
-## How to start ##
-Strongly recommend download simulation environment of [SCR1](https://github.com/syntacore/scr1). It supply a whole suite  of development.
+Please open "rtl/define_para.v" and give your parameters of 4 chained buffers.
 
-In the directory "scr1", I have included its whole source code. You can enter its sub-directory "sim", run "compile.do" to compile source files of SCR1 and this core, and run "sim.do" to make two testbench file running simultaneously. 
+Please open "scr1/build/test_info". Add your test cases and you can use "#" to exclude some you do not want to run.
 
-In "rtl" directory, open the file "define_para.v", you can give you own parameters to make different performance CPU core. 
+## FPGA evaluation ##
 
-If you open the definition of "USE_SSRV", SSRV CPU core will take over the authority of imem and dmem bus. SSRV CPU core will replace SCR1 to fulfil simulation tests. You can disable SSRV CPU core through removing the definition of "USE_SSRV".
+Go to the directory: ssrv-on-scr1. If you need a simulation closed to this FPGA implementation, the sub-directory sim/ could do that. If you need a review of the FPGA project, the sub-directory fpga/ could give you an example. 
 
-In "build" directory, "test_info" will list hex files and you can use "#" to exclude some you do not want to run.
+![hierarchy](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/hierarchy.png)
 
-[lixinbingg@163.com] 
+![fpga](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/fpga.png)
+
+
+#Help and Suggestion#
+
+[English](https://risclite.github.io/)        
+
+[中文](https://github.com/risclite/SuperScalar-RISCV-CPU/wiki/中文帮助维基)  
+  
+Email: lixinbingg@163.com
+
+
+
+
 
 
 

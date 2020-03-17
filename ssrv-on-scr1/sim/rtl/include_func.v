@@ -18,7 +18,7 @@
 	
     `define RV_PARA_LEN            (11+`RGBIT*3)	
 	
-	function `N(`RV_PARA_LEN) rv_para(input vld, input `N(`XLEN) i);
+	function `N(`RV_PARA_LEN) rv_para(input `N(`XLEN) i,input err);
 	    reg             illegal,mul,fencei,fence,sys,csr,jalr,jal,jcond,mem,alu;
 		reg `N(`RGBIT)  rd,rs1,rs0;
 	    begin
@@ -36,7 +36,7 @@
 			rd      = 0;
 			rs1     = 0;
 			rs0     = 0;
-			if ( vld ) begin
+			if ( 1'b1 ) begin
 			    if ( i[1:0]==2'b11 ) 
 				    case(i[6:2])
 					5'b01101 :                        //LUI
@@ -252,19 +252,8 @@
 								end
                     default  :  illegal = 1;
                     endcase
-	        end //vld
-			rv_para = { illegal,mul,fencei,fence,sys,csr,jalr,jal,jcond,mem,alu,rd,rs1,rs0 };
-	    end
-	endfunction
-	
-	`define RV_DISPT_LEN   (9+`RGBIT*3)
-	
-	function `N(`RV_DISPT_LEN) rv_dispatch(input vld, input `N(`XLEN) instr, input err);
-	    reg             illegal,mul,fencei,fence,sys,csr,jalr,jal,jcond,mem,alu;
-		reg `N(`RGBIT)  rd,rs1,rs0;	    
-	    begin
-		    {illegal,mul,fencei,fence,sys,csr,jalr,jal,jcond,mem,alu,rd,rs1,rs0 } = rv_para(vld,instr);
-	        rv_dispatch = { (vld&err),illegal,fencei|sys,fence,jalr,jal,jcond,mem|mul|csr|(vld&err)|illegal|(fencei|sys)|fence,jalr|jal|alu,rd,rs1,rs0 };
+	        end 
+			rv_para = { err,illegal,sys,fencei,fence,csr,jalr,jal,jcond,(mem|mul),(alu|jal|jalr),rd,rs1,rs0 };
 	    end
 	endfunction
 	
@@ -296,11 +285,36 @@
         end
     endfunction		
 	
-	function `N(`MMCMB_OFF) get_order(input `N(`MMCMB_OFF) n, input x);
+	function `N(`MMCMB_OFF) sub_order(input `N(`MMCMB_OFF) n, input x);
 	    begin
-		    get_order = (n==0) ? 0 : (n-x);
+		    sub_order = (n==0) ? 0 : (n-x);
 		end
 	endfunction
+	
+	function `N(`JCBUF_OFF) sub_level(input `N(`JCBUF_OFF) n, input x);
+	    begin
+		    sub_level = (n==0) ? 0 : (n-x);
+		end
+	endfunction
+	
+    function condition_satisfied( input `N(4) para, input `N(`XLEN) rs0_word, rs1_word );
+	begin
+        if ( para[3] )
+            case(para[2:0])
+            3'b000 : condition_satisfied =    rs0_word==rs1_word;
+            3'b001 : condition_satisfied = ~( rs0_word==rs1_word );
+            3'b100 : condition_satisfied =    (rs0_word[31]^rs1_word[31]) ? rs0_word[31] : (rs0_word<rs1_word);
+            3'b101 : condition_satisfied = ~( (rs0_word[31]^rs1_word[31]) ? rs0_word[31] : (rs0_word<rs1_word) );
+            3'b110 : condition_satisfied =    rs0_word<rs1_word;
+            3'b111 : condition_satisfied = ~( rs0_word<rs1_word );
+            default: condition_satisfied = 1'b0;
+            endcase
+        else if ( para[1] )
+            condition_satisfied = rs0_word != rs1_word;
+        else
+            condition_satisfied = rs0_word == rs1_word;  	
+	end
+	endfunction	
 	
 	
 	

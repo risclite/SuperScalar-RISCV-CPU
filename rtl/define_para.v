@@ -23,49 +23,111 @@
 `define BENCHMARK_LOG                                    //In benchmark test,there is a log for instructions execuated.
 
 
+//-------------------------------------------------------------------------------
+// Recommended core architecture configurations (modifiable)
+//-------------------------------------------------------------------------------
+//4 or 5 stages implementation
+`define FETCH_REGISTERED 
+
+//How many hardware multiplier/divider.
+`define MULT_NUM               2
+
+//-------------------------------------------------------------------------------
+//"instrbits" buffer
+//-------------------------------------------------------------------------------
+//The bus width of AHB-lite or AXI: 1 --- 32 bits  2 --- 64 bits, 4 ---- 128 bits. Only 2^x is allowed. If it is bigger than 1, WIDE_INSTR_BUS should be defined.
+`define BUFFER0_IN_LEN         4
+//How many words it holds:  1 --- 32 bits, 2 --- 64 bits. Any integer
+`define BUFFER0_BUF_LEN        (3*`BUFFER0_IN_LEN) 
+//How many instructions are generated to the next stage. 1 --- 1 instr, 2 -- 2 instr, Any integer
+`define BUFFER0_OUT_LEN        4
+
+//-------------------------------------------------------------------------------
+//"schedule" buffer
+//-------------------------------------------------------------------------------
+//no IN_LEN, because it equals to BUFFER0_OUT_LEN
+//How many instructions are kept. 1 -- 1 instr, 2-- 2 instr, Any integer
+`define BUFFER1_BUF_LEN        6
+//How many instructions are generated for multiple exec units. 1-- 1 instr, 2 -- 2 instr, Any integer
+`define BUFFER1_OUT_LEN        3
+
+//-------------------------------------------------------------------------------
+//"membuf" buffer
+//-------------------------------------------------------------------------------
+//no IN_LEN, because it equals to BUFFER1_OUT_LEN
+//How many MEM instructions are kept. 1 -- 1 instr, 2-- 2 instr, Any integer
+`define BUFFER2_BUF_LEN        8//(2*`BUFFER1_OUT_LEN) 
+//no OUT_LEN, it equals to 1
+
+//-------------------------------------------------------------------------------
+//"mprf" buffer
+//-------------------------------------------------------------------------------
+//no IN_LEN, because it equals to BUFFER1_OUT_LEN
+//How many ALU instructions are kept. 1 -- 1 instr, 2-- 2 instr, Any integer. (2*`BUFFER1_OUT_LEN) is recommanded
+`define BUFFER3_BUF_LEN        9//(2*`BUFFER1_OUT_LEN) 
+//How many ALU instructions are allowed to write to the register file in the same cycle, 1 -- 1 instr, 2-- 2 instr, Any integer, BUFFER1_OUT_LEN is recommanded
+`define BUFFER3_OUT_LEN        2//`BUFFER1_OUT_LEN
+
+
+
+
+
+
+
+//-------------------------------------------------------------------------------
+// Setting recommended configurations(Please make sure you know these defination)
+//-------------------------------------------------------------------------------
 
 //instrman.v
 `define XLEN                   32
-`define BUS_LEN                4                                                              //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0], it should be 1,2,4,8,16... etc
+`define BUS_LEN                `BUFFER0_IN_LEN                                                //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0], it should be 1,2,4,8,16... etc
 `define BUS_WID                (`BUS_LEN*`XLEN)                                               //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0]  
 `define PC_ALIGN               ( ((1'b1<<`XLEN)-1)^( (1'b1<<($clog2(`BUS_LEN)+2))-1'b1 ) )    //1->FFFFFFFC 2->FFFFFFF8 4->FFFFFFF0
 
+//predictor.v
+`define PDT_LEN                16
+`define PDT_OFF                $clog2(`PDT_LEN+1)
+`define PDT_ADDR               12
+`define PDT_BLEN               5
 
 //instrbits.v
 `define HLEN                   16
-`define BUS_OFF                $clog2(2*`BUS_LEN) 
-`define INBUF_LEN              3                                                              //buffer size: INBUF_LEN*BUS_LEN*XLEN(bits)
-`define INBUF_HLEN_OFF         $clog2(2*`INBUF_LEN*`BUS_LEN+1) 
-`define FETCH_LEN              4                                                              //how many words CPU could use.
+`define BUS_OFF                $clog2(2*`BUS_LEN)
+`define INBUF_LEN              (2*`BUFFER0_BUF_LEN)
+`define INBUF_OFF              $clog2(`INBUF_LEN+1)
+`define JCBUF_LEN              5
+`define JCBUF_OFF              $clog2(`JCBUF_LEN+1)
+`define FETCH_LEN              `BUFFER0_OUT_LEN                                               
 `define FETCH_OFF              $clog2(`FETCH_LEN+1)      
-`define FETCH_HLEN_OFF         $clog2(2*`FETCH_LEN+1+1)    
   
-
 //schedule.v
 `define RGBIT                  5
 `define RGLEN                  32
-`define MMCMB_OFF              $clog2(`MMBUF_LEN+`SDBUF_LEN+1)
-`define SDBUF_LEN              8
+`define SDBUF_LEN              `BUFFER1_BUF_LEN
 `define SDBUF_OFF              $clog2(`SDBUF_LEN+1)
-`define EXEC_LEN               4
+`define MMCMB_OFF              $clog2(`MMBUF_LEN+`SDBUF_LEN+1)
+`define EXEC_LEN               `BUFFER1_OUT_LEN
 `define EXEC_OFF               $clog2(`EXEC_LEN+1)
-`define FETCH_PARA_LEN         (9+3*`RGBIT)
+`define FETCH_PARA_LEN         (11+3*`RGBIT)
 `define EXEC_PARA_LEN          (2+3*`RGBIT)
+`define LASTBIT_MASK           ( {`RGLEN{1'b1}}<<1 )
 
 //membuf.v
-`define MMBUF_LEN              8
+`define MMBUF_LEN              `BUFFER2_BUF_LEN
 `define MMBUF_OFF              $clog2(`MMBUF_LEN+1)
-`define MMBUF_PARA_LEN         11
+`define MMBUF_PARA_LEN         10
+`define MMAREA_LEN             ( (`MMBUF_LEN>=6) ? 6 : `MMBUF_LEN )
 
 //mprf.v
-`define RFBUF_LEN              8
+`define RFBUF_LEN              `BUFFER3_BUF_LEN
 `define RFBUF_OFF              $clog2(`RFBUF_LEN+1)
-`define WRRG_LEN               `EXEC_LEN
-`define WRRG_OFF               $clog2(`WRRG_LEN+1)
-
+`define RFINTO_LEN             `BUFFER3_OUT_LEN
+`define RFINTO_OFF             $clog2(`RFINTO_LEN+1)
 
 //mul.v
-`define MULBUF_LEN             2
+`define MUL_LEN                `MULT_NUM
+`define MUL_OFF                ( (`MUL_LEN==1)+$clog2(`MUL_LEN) )//$clog2(`MUL_LEN+1)
+`define MULBUF_LEN             1
 `define MULBUF_OFF             $clog2(`MULBUF_LEN+1)
 
 

@@ -21,24 +21,24 @@ module mul(
     input                                    clk,
     input                                    rst,
 	
-	input                                    mul_vld,
+	input                                    mul_initial,
 	input  `N(3)                             mul_para,
 	input  `N(`XLEN)                         mul_rs0,
 	input  `N(`XLEN)                         mul_rs1,
-	input                                    mul_accept,
+	output                                   mul_ready,
 	
 	input                                    clear_pipeline,
-	
-	output `N(`MULBUF_OFF)                   mul_this_order,	
-	output                                   mul_in_vld,
-	output `N(`XLEN)                         mul_in_data
+
+	output                                   mul_finished,
+	output `N(`XLEN)                         mul_data,	
+	input                                    mul_ack
 	
 );
 
 
-//---------------------------------------------------------------------------
-//function defination
-//---------------------------------------------------------------------------
+    //---------------------------------------------------------------------------
+    //function defination
+    //---------------------------------------------------------------------------
 
     function `N($clog2(`XLEN+1)) highest_pos(input `N(`XLEN) d);
 	integer i;
@@ -59,9 +59,9 @@ module mul(
 	end
 	endfunction
 
-//---------------------------------------------------------------------------
-//signal defination
-//---------------------------------------------------------------------------
+    //---------------------------------------------------------------------------
+    //signal defination
+    //---------------------------------------------------------------------------
 
 	reg                           calc_flag;
 	reg  `N(3)                    calc_para;
@@ -75,31 +75,24 @@ module mul(
 	reg  `N(`XLEN)                write_data;
     wire                          write_over;
 	
-//---------------------------------------------------------------------------
-//statements area
-//---------------------------------------------------------------------------	
+    //---------------------------------------------------------------------------
+    //statements area
+    //---------------------------------------------------------------------------	
 
-	wire `N(`XLEN) rs0_word = mul_rs0;
-	
-	wire `N(`XLEN) rs1_word = mul_rs1;
+	wire `N(`XLEN)              rs0_word = mul_rs0;
+	wire `N(`XLEN)              rs1_word = mul_rs1;
+	wire                        rs0_sign = mul_para[2] ? (~mul_para[0] & rs0_word[31]) : ( (mul_para[1:0]!=2'b11) & rs0_word[31] );
+	wire                        rs1_sign = mul_para[2] ? (~mul_para[0] & rs1_word[31]) : ( ~mul_para[1] & rs1_word[31] );	
+	wire `N(`XLEN)              rs0_data = rs0_sign ? ( ~rs0_word + 1'b1 ) : rs0_word;
+	wire `N(`XLEN)              rs1_data = rs1_sign ? ( ~rs1_word + 1'b1 ) : rs1_word;	
 
-	wire rs0_sign = mul_para[2] ? (~mul_para[0] & rs0_word[31]) : ( (mul_para[1:0]!=2'b11) & rs0_word[31] );
-
-	wire rs1_sign = mul_para[2] ? (~mul_para[0] & rs1_word[31]) : ( ~mul_para[1] & rs1_word[31] );	
-
-	wire `N(`XLEN) rs0_data = rs0_sign ? ( ~rs0_word + 1'b1 ) : rs0_word;
-
-	wire `N(`XLEN) rs1_data = rs1_sign ? ( ~rs1_word + 1'b1 ) : rs1_word;	
-
-    wire mul_direct = mul_para[2] ? ((rs1_word==0)|(rs0_data<rs1_data)) : ((rs0_word==0)|(rs1_word==0));	
-	
-    wire mul_is_busy = calc_flag|write_flag;
+    wire                      mul_direct = mul_para[2] ? ((rs1_word==0)|(rs0_data<rs1_data)) : ((rs0_word==0)|(rs1_word==0));	
+    wire                     mul_is_busy = calc_flag|(write_flag & ~write_over);
+	assign                     mul_ready = ~mul_is_busy;
 	
 	//to calcuate MUL/DIV function
-	
-	wire calc_start = mul_vld & ~mul_direct & ~mul_is_busy & ~clear_pipeline;	
-	
-	wire write_start = mul_vld & mul_direct & ~mul_is_busy & ~clear_pipeline;
+	wire                      calc_start = mul_initial & ~mul_direct & ~mul_is_busy & ~clear_pipeline;	
+	wire                     write_start = mul_initial &  mul_direct & ~mul_is_busy & ~clear_pipeline;
 	
 	`FFx(calc_flag,0)
 	if ( calc_start )
@@ -123,7 +116,7 @@ module mul(
 	    calc_sign_rs0 <= rs0_sign;
     else;
 
-	wire num_less_compare = sumbits(rs0_data)<sumbits(rs1_data);
+	wire                num_less_compare = sumbits(rs0_data)<sumbits(rs1_data);
 
 	`FFx(calc_a,0)
 	if ( calc_start|write_start )
@@ -162,13 +155,10 @@ module mul(
 	    calc_y <= calc_y_in;
 	else;
 	
-    wire `N(`XLEN) pos_a_in = calc_flag ? calc_a_in : rs0_data;
-
-    wire `N(5) pos_a_out = highest_pos(pos_a_in);
-
-    wire `N(`XLEN) pos_b_in = calc_flag ? calc_b_in : rs1_data;
-
-    wire `N(5) pos_b_out = highest_pos(pos_b_in);
+    wire `N(`XLEN)              pos_a_in = calc_flag ? calc_a_in : rs0_data;
+    wire `N(5)                 pos_a_out = highest_pos(pos_a_in);
+    wire `N(`XLEN)              pos_b_in = calc_flag ? calc_b_in : rs1_data;
+    wire `N(5)                 pos_b_out = highest_pos(pos_b_in);
 
     `FFx(calc_a_pos,0)
 	if ( calc_start|write_start )
@@ -190,39 +180,29 @@ module mul(
 	    calc_b_pos <= pos_b_out;
     else;
 	
-	wire `N($clog2(`XLEN+1))  calc_ab_gap  = calc_a_pos - calc_b_pos;
+	wire `N($clog2(`XLEN+1)) calc_ab_gap = calc_a_pos - calc_b_pos;
+	wire `N($clog2(`XLEN))  calc_ab_diff = calc_ab_gap;
+
+	wire `N(2*`XLEN)           mul_shift = calc_a<<calc_b_pos;
+	wire                        sub_sign = calc_para[2] ? 1'b1 : calc_sign_xor;
+
+	wire `N(`XLEN)           low_add_in0 = calc_para[2] ? calc_a : calc_x;
+	wire `N(`XLEN)           low_add_in1 = calc_para[2] ? ( calc_b<<calc_ab_diff ) : mul_shift;
+    wire `N(`XLEN+1)         low_add_out = sub_sign ? (low_add_in0 - low_add_in1) : (low_add_in0 + low_add_in1);
 	
-	wire `N($clog2(`XLEN))    calc_ab_diff = calc_ab_gap;
+	wire                       carry_bit = low_add_out[`XLEN];
+	wire                    high_add_bit = calc_para[2] ? 1'b0 : carry_bit;
 
-	wire `N(2*`XLEN) mul_shift    = calc_a<<calc_b_pos;
+    wire `N(`XLEN)          high_add_in0 = calc_para[2] ? calc_a : calc_y;
+    wire `N(`XLEN)          high_add_in1 = calc_para[2] ? ( ( calc_b<<calc_ab_diff )>>1 ) : (mul_shift>>`XLEN);
+    wire `N(`XLEN)          high_add_out = sub_sign ? (high_add_in0 - high_add_in1 - high_add_bit) : (high_add_in0 + high_add_in1 + high_add_bit);
 
-	wire `N(`XLEN)   low_add_in0  = calc_para[2] ? calc_a : calc_x;
+	assign                     calc_a_in = calc_para[2] ?  ( carry_bit ? high_add_out : low_add_out ) : calc_a;
+	assign                     calc_b_in = calc_para[2] ? calc_b : ( calc_b ^ (1'b1<<calc_b_pos) );
+	assign                     calc_x_in = calc_para[2] ? ( calc_x|( (1'b1<<calc_ab_diff)>>carry_bit ) ) : low_add_out;
+	assign                     calc_y_in = calc_para[2] ? calc_y : high_add_out;
 	
-	wire `N(`XLEN)   low_add_in1  = calc_para[2] ? ( calc_b<<calc_ab_diff ) : mul_shift;
-	
-	wire             sub_sign     = calc_para[2] ? 1'b1 : calc_sign_xor;
-
-    wire `N(`XLEN+1) low_add_out  = sub_sign ? (low_add_in0 - low_add_in1) : (low_add_in0 + low_add_in1);
-	
-	wire             carry_bit    = low_add_out[`XLEN];
-
-    wire `N(`XLEN)   high_add_in0 = calc_para[2] ? calc_a : calc_y;
-
-    wire `N(`XLEN)   high_add_in1 = calc_para[2] ? ( ( calc_b<<calc_ab_diff )>>1 ) : (mul_shift>>`XLEN);
-	
-	wire             high_add_bit = calc_para[2] ? 1'b0 : carry_bit;
-
-    wire `N(`XLEN)   high_add_out = sub_sign ? (high_add_in0 - high_add_in1 - high_add_bit) : (high_add_in0 + high_add_in1 + high_add_bit);
-
-	assign           calc_a_in    = calc_para[2] ?  ( carry_bit ? high_add_out : low_add_out ) : calc_a;
-
-	assign           calc_b_in    = calc_para[2] ? calc_b : ( calc_b ^ (1'b1<<calc_b_pos) );
-
-	assign           calc_x_in    = calc_para[2] ? ( calc_x|( (1'b1<<calc_ab_diff)>>carry_bit ) ) : low_add_out;
-	
-	assign           calc_y_in    = calc_para[2] ? calc_y : high_add_out;
-	
-	assign           calc_over    = calc_flag & ( calc_para[2] ? ( calc_a_in<calc_b ) : (calc_b_in==0) );
+	assign                     calc_over = calc_flag & ( calc_para[2] ? ( calc_a_in<calc_b ) : (calc_b_in==0) );
 	
 	//write from mem channel
 	
@@ -233,7 +213,7 @@ module mul(
 	    write_flag <= 1'b0;
 	else;
 	
-	`COMB
+	always @*
 	if ( write_flag )
 	    case(calc_para)
 	    3'h0          :  write_data = calc_x;
@@ -253,23 +233,19 @@ module mul(
 
     assign write_over = write_flag & (mulbuf_length<`MULBUF_LEN);
 
-    assign mul_in_vld   = primary_length!=0;
-    assign mul_in_data 	= primary_data;
-	
-	assign mul_this_order = primary_length;
+    assign mul_finished   = primary_length!=0;
+    assign mul_data       = primary_data;
 	
     `FFx(mulbuf_data,0)
     if ( clear_pipeline )	
 	    mulbuf_data <= 0;
 	else
-	    mulbuf_data <= primary_data>>(mul_accept*`XLEN);
+	    mulbuf_data <= primary_data>>(mul_ack*`XLEN);
 		
 	`FFx(mulbuf_length,0)
 	if ( clear_pipeline )
 	    mulbuf_length <= 0;
 	else
-	    mulbuf_length <= primary_length - mul_accept;
-
-
+	    mulbuf_length <= primary_length - mul_ack;
 endmodule
 

@@ -6,7 +6,7 @@ vlog -work work -mfcu -sv "+nowarnSVCHK" +incdir+../src/includes/ +incdir+../../
 ../../rtl/mprf.v \
 ../../rtl/membuf.v \
 ../../rtl/alu.v \
-../../rtl/alu_with_jump.v \
+../../rtl/predictor.v \
 ../../rtl/schedule.v \
 ../../rtl/instrman.v \
 ../../rtl/instrbits.v \

@@ -140,11 +140,13 @@ end
 
 reg [7:0] start_char;
 
+wire        ssrv_jump_vld = tb_ssrv.u_ssrv.jump_vld|tb_ssrv.u_ssrv.branch_vld;
+wire [31:0] ssrv_jump_pc  = tb_ssrv.u_ssrv.jump_vld ? tb_ssrv.u_ssrv.jump_pc : tb_ssrv.u_ssrv.branch_pc; 																			  
 always_ff @(posedge clk) begin
     if (test_running) begin
         rst_init <= 1'b0;
 `ifdef USE_SSRV
-        if (tb_ssrv.u_ssrv.jump_vld & (tb_ssrv.u_ssrv.jump_pc==SCR1_EXIT_ADDR) & (tb_ssrv.u_ssrv.i_mprf.rfbuf_length==0) & ~rst_init & &rst_cnt) begin
+        if (ssrv_jump_vld & (ssrv_jump_pc==SCR1_EXIT_ADDR) & (tb_ssrv.u_ssrv.pipeline_is_empty==1) & ~rst_init & &rst_cnt) begin
 `else
         if ((i_top.i_core_top.i_pipe_top.curr_pc == SCR1_EXIT_ADDR) & ~rst_init & &rst_cnt) begin
 `endif
