@@ -85,10 +85,10 @@ Go to the directory: ssrv-on-scr1. If you need a simulation closed to this FPGA 
 
 ![hierarchy](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/hierarchy.png)
 
-![fpga](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/fpga.png)
+![fpga](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/fpga.PNG)
 
 
-#Help and Suggestion#
+## Help and Suggestion ##
 
 [English](https://risclite.github.io/)        
 
