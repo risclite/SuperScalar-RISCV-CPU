@@ -36,7 +36,8 @@ To define 4 chained buffers is an easy way to get a configuration scheme, which 
 |     2       | 2072           |  4.83                  |    4.24           | 2.39                 |
 |     1       | 3452           |  2.90                  |    2.67           | 1.48                 |
 
---RISCV gcc version: 8.3.0 
+--RISCV gcc version: 8.3.0
+
 --RV32IMC
 
 ## Structure ##
