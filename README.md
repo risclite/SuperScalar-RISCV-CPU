@@ -4,7 +4,7 @@ SSRV(Super-Scalar RISC-V) --- Super-scalar out-of-order RV32IMC CPU core,  perfo
 
 ## Overview ##
 
-SSRV is an open-source RV32IMC CPU core. It is synthesizable and parameterizable. You can define different configuration scheme to get different performance,  which ranges within 2.9 ~6.4 CoreMark/MHz, 2.6~4.9 DMIPS/MHz(best) and 1.5~2.8 DMIPS/MHz(legal). The recommended configuration scheme of 6.0 CoreMark/MHz could have Fmax: 30MHz on an Intel DE2-115 FPGA board. 
+SSRV is an open-source RV32IMC CPU core. It is synthesizable and parameterizable. You can define different configuration scheme to get different performance,  which ranges within 2.9~6.4 CoreMark/MHz, 2.6~4.9 DMIPS/MHz(best) and 1.5~2.8 DMIPS/MHz(legal). The recommended configuration scheme of 6.0 CoreMark/MHz could have Fmax: 30MHz on an Intel DE2-115 FPGA board. 
 
 ## Feature ##
 
