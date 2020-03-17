@@ -59,7 +59,7 @@ SSRV is inspired by and based on [SCR1](https://github.com/syntacore/scr1) of Sy
         define_para.v  ------------------------ project parameter verilog file
         include_func.v ------------------------ common function verilog file
 
-    scr1/  ------------------------ the scr1code and simulation starting directory.  
+    scr1/  ------------------------ the scr1 code and simulation starting directory.  
       |---build/    ------------------------ compiled test hex/elf/dump files. 
       |---src/      ------------------------ The RTL and testbench files of SCR1. 
       |---sim/      ------------------------ Simulation starting directory. 
