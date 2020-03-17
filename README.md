@@ -38,7 +38,6 @@ To define 4 chained buffers is an easy way to get a configuration scheme, which 
 
 --RISCV gcc version: 8.3.0
 
---RV32IMC
 
 ## Structure ##
 
