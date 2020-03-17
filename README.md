@@ -59,10 +59,10 @@ SSRV is inspired by and based on [SCR1](https://github.com/syntacore/scr1) of Sy
         define_para.v  ------------------------ project parameter verilog file
         include_func.v ------------------------ common function verilog file
 
-    scr1/  ------------------------ the scr1 modified code and simulation starting directory.
-      |---build/    ------------------------ compiled test hex/elf/dump files. The file "test_info" is a list of these test cases.
-      |---src/      ------------------------ The original RTL and testbench files of SCR1. Some of these files are modified to accept SSRV.
-      |---sim/      ------------------------ Simulation starting directory. Mentor Modelsim/QuestaSim could evoke two .do files: compile.do and sim.do. Other simulators will have to regard "compile.do" as a file list of all needed files.
+    scr1/  ------------------------ the scr1code and simulation starting directory.  
+      |---build/    ------------------------ compiled test hex/elf/dump files. 
+      |---src/      ------------------------ The RTL and testbench files of SCR1. 
+      |---sim/      ------------------------ Simulation starting directory. 
 
     ssrv-on-scr1/   ------------------------  A FPGA implementation of SSRV based on SCR1
        |--- fpga/   ------------------------  A Quartus project files on the DE2-115 development kit.
