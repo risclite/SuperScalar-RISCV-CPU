@@ -164,15 +164,16 @@ module tb_ssrv;
 /*
 
 `ifdef USE_SSRV
+
 integer fd_jump,fd_time;
 initial begin
     fd_jump = $fopen("jump_b.txt","w");
 	fd_time = $fopen("time_b.txt","w");
 end
 
-always @ (posedge clk)
-if ( u_ssrv.jump_vld & ~rst ) begin
-    $fdisplay(fd_jump,"%8h",u_ssrv.jump_pc);
+always @ (posedge `CORE_FIELD.clk)
+if ( u_ssrv.dmem_req & `CORE_FIELD.core_rst_n ) begin
+    $fdisplay(fd_jump,"%1h---%8h---%8h",u_ssrv.dmem_cmd,u_ssrv.dmem_addr,u_ssrv.dmem_cmd ? u_ssrv.dmem_wdata : 32'h0);
     $fdisplay(fd_time,"%d",$time);		
 end
 
@@ -186,12 +187,13 @@ initial begin
 end
 
 always @ (posedge `CORE_FIELD.clk)
-if ( `CORE_FIELD.i_pipe_top.i_pipe_exu.new_pc_req & `CORE_FIELD.core_rst_n ) begin
-    $fdisplay(fd_jump,"%8h",`CORE_FIELD.i_pipe_top.i_pipe_exu.new_pc);
+if ( `CORE_FIELD.i_pipe_top.dmem_req & `CORE_FIELD.core_rst_n ) begin
+    $fdisplay(fd_jump,"%1h---%8h---%8h",`CORE_FIELD.i_pipe_top.dmem_cmd,`CORE_FIELD.i_pipe_top.dmem_addr,`CORE_FIELD.i_pipe_top.dmem_cmd ? `CORE_FIELD.i_pipe_top.dmem_wdata : 32'h0 );
     $fdisplay(fd_time,"%d",$time);		
 end
 
 `endif
+
 
 */
 
