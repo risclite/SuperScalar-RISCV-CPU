@@ -65,7 +65,7 @@ SSRV is inspired by and based on [SCR1](https://github.com/syntacore/scr1) of Sy
       |---sim/      ------------------------ Simulation starting directory. 
 
     ssrv-on-scr1/   ------------------------  A FPGA implementation of SSRV based on SCR1
-       |--- fpga/   ------------------------  A Quartus project files on the DE2-115 development kit.
+       |--- fpga/   ------------------------  The Quartus project files on the DE2-115 development kit.
        |--- sim/    ------------------------  A simulation package on this FPGA implementation.
 
     testbench
