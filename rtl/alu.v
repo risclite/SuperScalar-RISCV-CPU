@@ -159,7 +159,7 @@ module alu (
 		if ( instr[6:4]==3'b011 ) //mul
 		    lsu_para = { 1'b1, instr[11:7], 1'b0, instr[14:12] };
 	    else
-	        lsu_para = { instr[11:7], instr[5] ,instr[14:12] };
+	        lsu_para = { (instr[5] ? 5'b0 : instr[11:7]), instr[5] ,instr[14:12] };
 	else case({instr[15:13],instr[1:0]})
         5'b010_00: lsu_para = { {2'b1,instr[4:2]}, 1'b0, 3'b010  };
 		5'b110_00: lsu_para = {              5'h0, 1'b1, 3'b010  };
