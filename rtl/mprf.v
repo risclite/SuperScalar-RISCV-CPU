@@ -87,7 +87,6 @@ module mprf(
 	wire `N(`RFBUF_LEN*`JCBUF_OFF)      chain_stay_level `N(`RFBUF_LEN+1);
 	wire `N(`RFBUF_LEN*`XLEN)           chain_stay_data  `N(`RFBUF_LEN+1);
 	
-	wire `N(`RFBUF_OFF)                 zero_num         `N(`RFBUF_LEN+1);
 	wire `N(`RGLEN)                     chain_order_list `N(`RFBUF_LEN+1);
 	
 	wire `N(`RFINTO_LEN*`RGBIT)         away_sel;
@@ -146,7 +145,6 @@ module mprf(
 	assign                    chain_stay_level[0] = 0;
 	assign                     chain_stay_data[0] = 0;
 
-    assign                            zero_num[0] = 0;
     assign                    chain_order_list[0] = 0;
 
     generate 
@@ -173,8 +171,7 @@ module mprf(
 		assign              chain_stay_level[i+1] = chain_stay_level[i]|(level_up<<(stay_shift*`JCBUF_OFF));
 		assign               chain_stay_data[i+1] = chain_stay_data[i]|(rfbuf_data[`IDX(i,`XLEN)]<<(stay_shift*`XLEN));
 		
-		assign                      zero_num[i+1] = zero_num[i] + ( go_stay & (order_up==0) );
-		assign              chain_order_list[i+1] = chain_order_list[i]|( (go_stay & (order_up==0) & (zero_num[i]>=`RFINTO_LEN))<<rfbuf_sel[`IDX(i,`RGBIT)] );
+		assign              chain_order_list[i+1] = chain_order_list[i]|( (go_stay & (order_up==0) )<<rfbuf_sel[`IDX(i,`RGBIT)] );
     end
 
 	endgenerate
