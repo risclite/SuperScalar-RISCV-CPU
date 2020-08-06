@@ -153,7 +153,7 @@ always_ff @(posedge clk) begin
             bit test_pass;
             test_running <= 1'b0;
 `ifdef USE_SSRV
-            test_pass = i_top.i_core_top.i_pipe_top.i_ssrv.i_mprf.r[10]==0;
+            test_pass = i_top.i_core_top.i_pipe_top.i_ssrv.i_mprf.rbank[10]==0;
 `else
             test_pass = (i_top.i_core_top.i_pipe_top.i_pipe_mprf.mprf_int[10] == 0);
 `endif			

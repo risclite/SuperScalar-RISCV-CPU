@@ -1029,6 +1029,8 @@ set_global_assignment -name VERILOG_FILE ../rtl/membuf.v
 set_global_assignment -name VERILOG_FILE ../rtl/instrman.v
 set_global_assignment -name VERILOG_FILE ../rtl/instrbits.v
 set_global_assignment -name VERILOG_FILE ../rtl/alu.v
+set_global_assignment -name VERILOG_FILE ../rtl/lsu.v
+set_global_assignment -name VERILOG_FILE ../rtl/predictor.v
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/ssrv_pipe_top.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../scr1/core/scr1_core_top.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../scr1/core/primitives/scr1_reset_cells.sv
@@ -1036,5 +1038,5 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../scr1/top/scr1_top_ahb.sv
 set_global_assignment -name SDC_FILE DE2_115.SDC
 set_global_assignment -name QIP_FILE ../pll/plll.qip
 set_global_assignment -name LAST_QUARTUS_VERSION "18.0.0 Standard Edition"
-set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"
+set_global_assignment -name OPTIMIZATION_MODE "AGGRESSIVE PERFORMANCE"
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

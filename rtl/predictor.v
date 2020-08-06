@@ -32,7 +32,7 @@ module predictor(
 	input                       jcond_vld,
 	input  `N(`XLEN)            jcond_pc,
 	input                       jcond_hit,
-	input                       jcond_satisfied
+	input                       jcond_taken
 
 );
 
@@ -55,16 +55,16 @@ module predictor(
 		5'b01000 : predict_bit = 0;
 		5'b01001 : predict_bit = 0;
 		5'b01010 : predict_bit = 1;
-		5'b01011 : predict_bit = 0;
-		5'b01100 : predict_bit = 1;
+		5'b01011 : predict_bit = 1;
+		5'b01100 : predict_bit = 0;
 		5'b01101 : predict_bit = 1;
-		5'b01110 : predict_bit = 1;
+		5'b01110 : predict_bit = 0;
 		5'b01111 : predict_bit = 1;
 		5'b10000 : predict_bit = 0;
 		5'b10001 : predict_bit = 0;
-		5'b10010 : predict_bit = 0;
-		5'b10011 : predict_bit = 0;
-        5'b10100 : predict_bit = 1;
+		5'b10010 : predict_bit = 1;
+		5'b10011 : predict_bit = 1;
+        5'b10100 : predict_bit = 0;
 		5'b10101 : predict_bit = 0;
 		5'b10110 : predict_bit = 1;
 		5'b10111 : predict_bit = 1;
@@ -103,6 +103,26 @@ module predictor(
 	
 	assign                              chain_predict[0] = 0;
 
+`ifdef INSTR_MISALLIGNED
+    
+	wire `N(`PDT_ADDR)                   target_original = imem_addr>>1;
+	wire `N(`BUS_OFF)                       target_shift = target_original;
+	wire `N(`PDT_ADDR-`BUS_OFF)           target_address = target_original>>`BUS_OFF;
+	
+	generate
+	for (i=0;i<`PDT_LEN;i=i+1) begin:gen_imem_predict
+		wire `N(`BUS_OFF)                     this_shift = pdt_address[`IDX(i,`PDT_ADDR)];
+		wire `N(`PDT_ADDR-`BUS_OFF)         this_address = pdt_address[`IDX(i,`PDT_ADDR)]>>`BUS_OFF;		
+		wire                                      bigger = this_shift>=target_shift;
+		wire `N(`PDT_ADDR-`BUS_OFF)           to_address = bigger ? target_address : ( target_address + 1'b1 );
+		wire                                    this_bit = pdt_vld[i] & (to_address==this_address) & predict_bit(pdt_bits[`IDX(i,`PDT_BLEN)]);		
+		wire `N(`BUS_OFF)                       to_shift = this_shift - target_shift;
+	    assign                        chain_predict[i+1] = chain_predict[i]|(this_bit<<to_shift);		
+    end    
+	endgenerate
+	
+`else
+
 	wire `N(`PDT_ADDR-`BUS_OFF)           target_address = imem_addr>>(1+`BUS_OFF);
 
     generate
@@ -113,6 +133,8 @@ module predictor(
 	    assign                        chain_predict[i+1] = chain_predict[i]|(this_bit<<this_shift);
 	end
 	endgenerate
+	
+`endif	
 
 	`FFx(get_predict,0)
 	if ( imem_req )
@@ -156,7 +178,7 @@ module predictor(
     wire                                      new_vld = jcond_vld & ( find_vld|(~jcond_hit) );
 	wire `N(`PDT_ADDR)                    new_address = find_aim;
 	wire `N(`PDT_BLEN)                       old_bits = find_vld ? ( pdt_bits>>(find_index*`PDT_BLEN) ) : 5'b11111;
-	wire `N(`PDT_BLEN)                       new_bits = { old_bits,jcond_satisfied };
+	wire `N(`PDT_BLEN)                       new_bits = { old_bits,jcond_taken };
 
     wire `N(`PDT_LEN)                          go_vld = ( high_vld<<(find_vld ? 1'b0 : 1'b1) )|( low_vld<<1 )|new_vld;
 	wire `N(`PDT_ADDR*`PDT_LEN)            go_address = ( high_address<<(find_vld ? 0 : `PDT_ADDR) )|( low_address<<`PDT_ADDR )|new_address;

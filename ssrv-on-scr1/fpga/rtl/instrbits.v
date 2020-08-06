@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////////////
 //
-//Copyright 2019  Li Xinbing
+//Copyright 2020  Li Xinbing
 //
 //Licensed under the Apache License, Version 2.0 (the "License");
 //you may not use this file except in compliance with the License.
@@ -21,6 +21,22 @@ module instrbits
 (
     input                                 clk,
     input                                 rst,
+
+    input                                 jump_vld,
+	input  `N(`XLEN)                      jump_pc,	
+    output                                branch_vld,
+	output `N(`XLEN)                      branch_pc,	
+    output                                buffer_free,	
+
+    input                                 instr_vld,
+    input  `N(`BUS_WID)                   instr_data,
+	input                                 instr_err,	
+	input  `N(2*`BUS_LEN)                 instr_predict,
+	
+	output                                jcond_vld,
+	output `N(`XLEN)                      jcond_pc,
+	output                                jcond_hit,
+	output                                jcond_taken,	
 	
 	output                                sys_vld,
 	output `N(`XLEN)                      sys_instr,
@@ -31,36 +47,21 @@ module instrbits
 	output `N(`XLEN)                      csr_instr,
 	output `N(`XLEN)                      csr_rs,
 	output `N(`RGBIT)                     csr_rd_sel,
-	
-    input                                 jump_vld,
-	input  `N(`XLEN)                      jump_pc,	
-    output                                branch_vld,
-	output `N(`XLEN)                      branch_pc,	
-    output                                buffer_free,	
-    input                                 instr_vld,
-    input  `N(`BUS_WID)                   instr_data,
-	input                                 instr_err,	
-	input  `N(2*`BUS_LEN)                 instr_predict,
- 
+	 
     output `N(`RGBIT)                     rs0_sel,
 	output `N(`RGBIT)                     rs1_sel,
 	input  `N(`XLEN)                      rs0_word,
 	input  `N(`XLEN)                      rs1_word,
-	
-	input  `N(`RGLEN)                     pipeline_level_rdlist,
-	input                                 pipeline_is_empty,
+
     input  `N(`SDBUF_OFF)                 sdbuf_left_num,
-  
 	output `N(`FETCH_LEN)                 fetch_vld,
     output `N(`FETCH_LEN*`XLEN)           fetch_instr,
 	output `N(`FETCH_LEN*`XLEN)           fetch_pc,
     output `N(`FETCH_LEN*`EXEC_PARA_LEN)  fetch_para,
 	output `N(`FETCH_LEN*`JCBUF_OFF)      fetch_level,
 	
-	output                                jcond_vld,
-	output `N(`XLEN)                      jcond_pc,
-	output                                jcond_hit,
-	output                                jcond_satisfied,
+	input  `N(`RGLEN)                     pipeline_instr_rdlist,
+	input                                 pipeline_is_empty,
 	
 	output                                level_decrease,
 	output                                level_clear
@@ -77,18 +78,15 @@ module instrbits
     //---------------------------------------------------------------------------
     //signal defination
     //---------------------------------------------------------------------------
-	reg   `N(`BUS_OFF)                    instr_offset;	
 	
-	wire  `N(`RGLEN)                      fetch_level_rdlist;
+	wire  `N(`RGLEN)                      fetch_instr_rdlist;
 	wire  `N(`FETCH_OFF)                  fetch_length;
 	wire                                  fetch_is_empty;
 	
 	wire                                  jalr_vld;
 	wire  `N(`XLEN)                       jalr_instr;
 	wire                                  jalr_rs0_valid;
-	
-	reg                                   dedicated_flag;
-	reg   `N(`RGBIT)                      dedicated_rs0;	
+		
 	
 	wire  `N(`INBUF_OFF)                  eval_start              `N(`FETCH_LEN+1);
     wire                                  following_bypass        `N(`FETCH_LEN+1);
@@ -100,9 +98,6 @@ module instrbits
     wire  `N(`FETCH_LEN*`JCBUF_OFF)       eval_level;	
 	wire  `N(`FETCH_OFF)                  eval_length             `N(`FETCH_LEN+1);
 	wire  `N(`INBUF_OFF)                  eval_offset             `N(`FETCH_LEN+1);	
-	
-	wire                                  chain_dedicated_flag    `N(`FETCH_LEN+1);
-	wire  `N(`RGBIT)                      chain_dedicated_rs0     `N(`FETCH_LEN+1);
 	
 	wire                                  jcget_vld               `N(`FETCH_LEN+1);
 	wire  `N(`XLEN)                       jcget_instr             `N(`FETCH_LEN+1);
@@ -131,13 +126,21 @@ module instrbits
 
     genvar i,j;
     //---------------------------------------------------------------------------
-    //statements area
+    //statement description
     //---------------------------------------------------------------------------
 
     //---------------------------------------------------------------------------
-	//prepare incoming data, to either buffer: inbuf( main buffer), bkbuf( alter buffer)
+	//prepare incoming data
 	//---------------------------------------------------------------------------
 
+`ifdef INSTR_MISALLIGNED
+   
+    wire  `N(`BUS_OFF)                    instr_offset = 0;
+
+`else
+
+    reg   `N(`BUS_OFF)                    instr_offset;	
+   
     //to remove redundant part of line_data
 	`FFx(instr_offset,0)
 	if ( jump_vld )
@@ -147,7 +150,9 @@ module instrbits
 	else if ( instr_vld )
 	    instr_offset <= 0;
 	else;
- 	
+ 
+`endif 
+	
     wire `N(`BUS_WID)                     imem_data = instr_vld ? ( instr_data>>(instr_offset*`HLEN) ) : 0; 	
 	wire `N(2*`BUS_LEN)                    imem_err = instr_vld ? ( { (2*`BUS_LEN){instr_err} }>>instr_offset ) : 0;
 	wire `N(2*`BUS_LEN)                imem_predict = instr_vld ? ( instr_predict>>instr_offset ) : 0;
@@ -155,17 +160,22 @@ module instrbits
 
 
     //---------------------------------------------------------------------------
-	//inbuf evaluation
+	//inbuf processing
 	//---------------------------------------------------------------------------
 
-    wire                           leading_is_empty = pipeline_is_empty & fetch_is_empty;
-	wire `N(`RGLEN)                  leading_rdlist = (pipeline_level_rdlist | fetch_level_rdlist) & `LASTBIT_MASK;
-	wire                           no_cond_assuming = ( jcbuf_length==0 );
-	
     wire `N(`INBUF_LEN*`HLEN)            inall_bits = inbuf_bits|(imem_data<<(inbuf_length*`HLEN));
     wire `N(`INBUF_LEN)                   inall_err = inbuf_err|(imem_err<<inbuf_length);
 	wire `N(`INBUF_LEN)               inall_predict = inbuf_predict|(imem_predict<<inbuf_length);
-    wire `N(`INBUF_OFF)                inall_length = inbuf_length + imem_length;		
+    wire `N(`INBUF_OFF)                inall_length = inbuf_length + imem_length;
+
+    wire                           leading_is_empty = pipeline_is_empty & fetch_is_empty;
+
+	wire `N(`RGLEN)                  leading_rdlist = (pipeline_instr_rdlist | fetch_instr_rdlist) & `LASTBIT_MASK;
+	wire `N(`RGBIT)                        jalr_rs0 = gen_inbuf[0].rs0;
+	wire                       jalr_rs0_invalid_bit = leading_rdlist>>jalr_rs0;
+	assign                           jalr_rs0_valid = ~jalr_rs0_invalid_bit;	
+
+	wire                           no_cond_assuming = ( jcbuf_length==0 );
 
 	wire `N(`FETCH_OFF)               eval_capacity = ( sdbuf_left_num>=fetch_length ) ? `FETCH_LEN : (`FETCH_LEN - fetch_length + sdbuf_left_num);
 	
@@ -173,14 +183,14 @@ module instrbits
 	assign                      following_bypass[0] = 0;
 	assign                           eval_length[0] = 0;
 	assign                           eval_offset[0] = 0;
-	assign                  chain_dedicated_flag[0] = 0;
-	assign                   chain_dedicated_rs0[0] = 0;
+
 	assign                             jcget_vld[0] = jcbuf_length==`JCBUF_LEN;
 	assign                           jcget_instr[0] = 0;
 	assign                              jcget_pc[0] = 0;
 	assign                             jcget_rs0[0] = 0;
 	assign                             jcget_rs1[0] = 0;
 	assign                         jcget_predict[0] = 0;
+	
 	assign                    chain_bnch_initial[0] = 0;
 	assign                      chain_bnch_instr[0] = 0;
 	assign                         chain_bnch_pc[0] = 0;
@@ -197,8 +207,7 @@ module instrbits
 		wire `N(`XLEN)                           pc = inbuf_pc + (eval_start[i]<<1);
 		wire `N(2)                             errs = inall_err>>eval_start[i];
 		wire                                    err = (instr[1:0]==2'b11) ? ( |errs ) : errs[0];
-		wire `N(2)                         predicts = inall_predict>>eval_start[i];
-		wire                                predict = (instr[1:0]==2'b11) ? ( |predicts ) : predicts[0];
+		wire `N(2)                          predict = inall_predict>>eval_start[i];
 		
 		//parameter
         wire `N(`FETCH_PARA_LEN)               para = rv_para(instr,err);
@@ -213,23 +222,21 @@ module instrbits
 		wire                                  fence = point>>4;
 		wire                                    sys = |(point>>5);
 		
+		//variable
+		wire                           sys_approved = (i==0) ? ( no_cond_assuming & leading_is_empty ) : 0;
+        wire                          jalr_approved = (i==0) ? ( no_cond_assuming & jalr_rs0_valid ) : 0; 			
+		wire                                 bypass = sys|( (fence|csr) & ~sys_approved )|jalr|jal|( jcond & (jcget_vld[i]|predict) );	
+        wire                                  leave = bypass ? ( (jalr & jalr_approved)|jal ) : 1'b1;
+		assign                following_bypass[i+1] = following_bypass[i]|(vld & bypass);				
+		
 		//eval output			
-		wire                               sys_pass = (i==0) ? ( no_cond_assuming & leading_is_empty ) : 0;
-        wire                              jalr_pass = (i==0) ? ( no_cond_assuming & jalr_rs0_valid ) : 0; 		
-		wire                                 bypass = sys|( (fence|csr) & ~sys_pass )|jalr|jal|( jcond & (jcget_vld[i]|predict) );	
-        wire                                   stay = bypass ? ( (jalr & jalr_pass)|jal ) : 1'b1;
-		assign                following_bypass[i+1] = following_bypass[i]|(vld & bypass);		
-		assign                          eval_vld[i] = vld & stay & ~following_bypass[i];
+		assign                          eval_vld[i] = vld & leave & ~following_bypass[i];
 		assign            eval_instr[`IDX(i,`XLEN)] = instr;
 		assign               eval_pc[`IDX(i,`XLEN)] = pc;
 		assign    eval_para[`IDX(i,`EXEC_PARA_LEN)] = para;		
 		assign       eval_level[`IDX(i,`JCBUF_OFF)] = (jcbuf_length==`JCBUF_LEN) ? `JCBUF_LEN : (jcbuf_length + jcget_vld[i]);
 		assign                     eval_length[i+1] = eval_vld[i] ? (i+1) : eval_length[i];
 		assign                     eval_offset[i+1] = eval_vld[i] ? ( eval_start[i+1] ) : eval_offset[i];		
-	
-	    //dedicated rs0
-		assign            chain_dedicated_flag[i+1] = chain_dedicated_flag[i]|( vld & ( csr|jalr ) & ~following_bypass[i] );
-		assign             chain_dedicated_rs0[i+1] = ( vld & ( csr|jalr ) & ~following_bypass[i] ) ? rs0 : chain_dedicated_rs0[i];
 	
         //jcget output
 		wire                            jcget_occur = vld & jcond & ~jcget_vld[i] & ~following_bypass[i];
@@ -249,26 +256,17 @@ module instrbits
 	end
 	endgenerate
 	
-	`FFx(dedicated_flag,0)
-	dedicated_flag <= ( csr_vld|jalr_vld ) ? 0 : chain_dedicated_flag[`FETCH_LEN];
-		
-	`FFx(dedicated_rs0,0)
-	dedicated_rs0 <= chain_dedicated_rs0[`FETCH_LEN];
-	
-	wire                       jalr_rs0_invalid_bit = leading_rdlist>>dedicated_rs0;
-	assign                           jalr_rs0_valid = dedicated_flag & ~jalr_rs0_invalid_bit;
-	
-	assign                                  sys_vld = gen_inbuf[0].vld & gen_inbuf[0].sys & gen_inbuf[0].sys_pass;
+	assign                                  sys_vld = gen_inbuf[0].vld & gen_inbuf[0].sys & gen_inbuf[0].sys_approved;
 	assign                                sys_instr = gen_inbuf[0].instr;
 	assign                                   sys_pc = gen_inbuf[0].pc;
 	assign                                 sys_para = (gen_inbuf[0].point>>5); 
 	
-	assign                                  csr_vld = gen_inbuf[0].vld & gen_inbuf[0].csr & gen_inbuf[0].sys_pass;
+	assign                                  csr_vld = gen_inbuf[0].vld & gen_inbuf[0].csr & gen_inbuf[0].sys_approved;
 	assign                                csr_instr = gen_inbuf[0].instr;
 	assign                               csr_rd_sel = gen_inbuf[0].rd;
 	assign                                   csr_rs = rs0_word;	
 
-	assign                                 jalr_vld = gen_inbuf[0].vld & gen_inbuf[0].jalr & gen_inbuf[0].jalr_pass;
+	assign                                 jalr_vld = gen_inbuf[0].vld & gen_inbuf[0].jalr & gen_inbuf[0].jalr_approved;
 	assign                               jalr_instr = gen_inbuf[0].instr;
 	
 	wire `N(`INBUF_OFF)                inbuf_offset = eval_offset[`FETCH_LEN];
@@ -312,7 +310,7 @@ module instrbits
 	wire `N(`RGBIT)                       jcout_rs1 = jcbuf_rs1;
 	wire                              jcout_predict = jcbuf_predict;
 	
-	assign                                  rs0_sel = no_cond_assuming ? dedicated_rs0 : jcout_rs0;
+	assign                                  rs0_sel = no_cond_assuming ? jalr_rs0 : jcout_rs0;
     assign                                  rs1_sel = jcout_rs1;
     wire                          jcond_rs0_invalid = leading_rdlist>>jcout_rs0;
     wire                          jcond_rs1_invalid = leading_rdlist>>jcout_rs1;
@@ -353,7 +351,7 @@ module instrbits
 	assign                                jcond_vld = jcond_valid;
 	assign                                 jcond_pc = jcout_pc;
 	assign                                jcond_hit = ( jcout_predict==jcond_result );
-	assign                          jcond_satisfied = jcond_result;	
+	assign                              jcond_taken = jcond_result;	
 	
     //---------------------------------------------------------------------------
 	//fetch preparation
@@ -365,7 +363,7 @@ module instrbits
 	reg  `N(`FETCH_LEN*`XLEN)           dump_pc;
     reg  `N(`FETCH_LEN*`EXEC_PARA_LEN)  dump_para;
 	reg  `N(`FETCH_LEN*`JCBUF_OFF)      dump_level;
-	reg  `N(`FETCH_LEN*`RGLEN)          dump_level_rdlist;
+	reg  `N(`FETCH_LEN*`RGLEN)          dump_instr_rdlist;
 	reg  `N(`FETCH_OFF)                 dump_length;
 	
 	wire `N(`FETCH_OFF)                  dump_drop_offset = ( sdbuf_left_num>=dump_length ) ? dump_length : sdbuf_left_num;
@@ -384,11 +382,11 @@ module instrbits
 	wire `N(`FETCH_LEN*`XLEN)           dumpin_pcx;
 	wire `N(`FETCH_LEN*`EXEC_PARA_LEN)  dumpin_parax;
 	wire `N(`FETCH_LEN*`JCBUF_OFF)      dumpin_levelx;
-	wire `N(`FETCH_OFF)                 chain_real_length       `N(`FETCH_LEN+1);
-	wire `N(`RGLEN)                     chain_dump_level_rdlist `N(`FETCH_LEN+1);
+	wire `N(`FETCH_OFF)                 chain_dump_length       `N(`FETCH_LEN+1);
+	wire `N(`RGLEN)                     chain_dump_instr_rdlist `N(`FETCH_LEN+1);
 	
-	assign                           chain_real_length[0] = 0;
-	assign                     chain_dump_level_rdlist[0] = 0;
+	assign                           chain_dump_length[0] = 0;
+	assign                     chain_dump_instr_rdlist[0] = 0;
 	
     generate
     for (i=0;i<`FETCH_LEN;i=i+1) begin:gen_dumpin
@@ -407,8 +405,8 @@ module instrbits
 		assign                  dumpin_pcx[`IDX(i,`XLEN)] = vldx ? pc : 0;
 		assign       dumpin_parax[`IDX(i,`EXEC_PARA_LEN)] = vldx ? para : 0;
         assign          dumpin_levelx[`IDX(i,`JCBUF_OFF)] = vldx ? levelx : 0;
-		assign                     chain_real_length[i+1] = vldx ? (i+1) : chain_real_length[i];
-		assign               chain_dump_level_rdlist[i+1] = chain_dump_level_rdlist[i]|( (vld&level_zero)<<rd );
+		assign                     chain_dump_length[i+1] = vldx ? (i+1) : chain_dump_length[i];
+		assign               chain_dump_instr_rdlist[i+1] = chain_dump_instr_rdlist[i]|( (vld&level_zero)<<rd );
     end
     endgenerate		
 	
@@ -428,10 +426,10 @@ module instrbits
 	dump_level <= jump_vld ? 0 : dumpin_levelx;	
 	
 	`FFx(dump_length,0)
-	dump_length <= jump_vld ? 0 : chain_real_length[`FETCH_LEN];	
+	dump_length <= jump_vld ? 0 : chain_dump_length[`FETCH_LEN];	
 	
-	`FFx(dump_level_rdlist,0)
-	dump_level_rdlist <= jump_vld ? 0 : chain_dump_level_rdlist[`FETCH_LEN];
+	`FFx(dump_instr_rdlist,0)
+	dump_instr_rdlist <= jump_vld ? 0 : chain_dump_instr_rdlist[`FETCH_LEN];
 	
 	
 	assign            fetch_vld = dump_vld;
@@ -439,7 +437,7 @@ module instrbits
     assign             fetch_pc = dump_pc;
 	assign           fetch_para = dump_para;	
 	assign          fetch_level = dump_level;
-	assign   fetch_level_rdlist = dump_level_rdlist;
+	assign   fetch_instr_rdlist = dump_instr_rdlist;
 	assign         fetch_length = dump_length;
 	assign       fetch_is_empty = ( dump_length==0 );
 `else
@@ -448,7 +446,7 @@ module instrbits
     assign             fetch_pc = eval_pc;
 	assign           fetch_para = eval_para;	
 	assign          fetch_level = eval_level;
-	assign   fetch_level_rdlist = 0;
+	assign   fetch_instr_rdlist = 0;
 	assign         fetch_length = `FETCH_LEN;
 	assign       fetch_is_empty = 1;
 `endif	

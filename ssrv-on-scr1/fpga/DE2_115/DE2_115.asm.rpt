@@ -1,5 +1,5 @@
 Assembler report for DE2_115
-Fri Mar 13 10:28:37 2020
+Thu Aug 06 14:08:11 2020
 Quartus Prime Version 18.0.0 Build 614 04/24/2018 SJ Standard Edition
 
 
@@ -10,7 +10,7 @@ Quartus Prime Version 18.0.0 Build 614 04/24/2018 SJ Standard Edition
   2. Assembler Summary
   3. Assembler Settings
   4. Assembler Generated Files
-  5. Assembler Device Options: F:/proj/ssrv-fpga/fpga/DE2_115/DE2_115.sof
+  5. Assembler Device Options: F:/rvproj/ssrv-pipe3/fpga/DE2_115/DE2_115.sof
   6. Assembler Messages
 
 
@@ -37,7 +37,7 @@ refer to the applicable agreement for further details.
 +---------------------------------------------------------------+
 ; Assembler Summary                                             ;
 +-----------------------+---------------------------------------+
-; Assembler Status      ; Successful - Fri Mar 13 10:28:37 2020 ;
+; Assembler Status      ; Successful - Thu Aug 06 14:08:11 2020 ;
 ; Revision Name         ; DE2_115                               ;
 ; Top-level Entity Name ; DE2_115                               ;
 ; Family                ; Cyclone IV E                          ;
@@ -45,56 +45,30 @@ refer to the applicable agreement for further details.
 +-----------------------+---------------------------------------+
 
 
-+---------------------------------------------------------------------------------------------------------------+
-; Assembler Settings                                                                                            ;
-+-----------------------------------------------------------------------------+----------------+----------------+
-; Option                                                                      ; Setting        ; Default Value  ;
-+-----------------------------------------------------------------------------+----------------+----------------+
-; Use smart compilation                                                       ; Off            ; Off            ;
-; Enable parallel Assembler and Timing Analyzer during compilation            ; On             ; On             ;
-; Enable compact report table                                                 ; Off            ; Off            ;
-; Generate compressed bitstreams                                              ; On             ; On             ;
-; Compression mode                                                            ; Off            ; Off            ;
-; Clock source for configuration device                                       ; Internal       ; Internal       ;
-; Clock frequency of the configuration device                                 ; 10 MHZ         ; 10 MHz         ;
-; Divide clock frequency by                                                   ; 1              ; 1              ;
-; Auto user code                                                              ; On             ; On             ;
-; Use configuration device                                                    ; Off            ; Off            ;
-; Configuration device                                                        ; Auto           ; Auto           ;
-; Voltage output format                                                       ; Auto discovery ; Auto discovery ;
-; Configuration device auto user code                                         ; Off            ; Off            ;
-; Generate Tabular Text File (.ttf) For Target Device                         ; Off            ; Off            ;
-; Generate Raw Binary File (.rbf) For Target Device                           ; Off            ; Off            ;
-; Generate Hexadecimal (Intel-Format) Output File (.hexout) for Target Device ; Off            ; Off            ;
-; Hexadecimal Output File start address                                       ; 0              ; 0              ;
-; Hexadecimal Output File count direction                                     ; Up             ; Up             ;
-; Release clears before tri-states                                            ; Off            ; Off            ;
-; Auto-restart configuration after error                                      ; On             ; On             ;
-; Enable OCT_DONE                                                             ; Off            ; Off            ;
-; Generate Serial Vector Format File (.svf) for Target Device                 ; Off            ; Off            ;
-; Generate a JEDEC STAPL Format File (.jam) for Target Device                 ; Off            ; Off            ;
-; Generate a compressed Jam STAPL Byte Code 2.0 File (.jbc) for Target Device ; Off            ; Off            ;
-; Generate a compressed Jam STAPL Byte Code 2.0 File (.jbc) for Target Device ; On             ; On             ;
-+-----------------------------------------------------------------------------+----------------+----------------+
++----------------------------------+
+; Assembler Settings               ;
++--------+---------+---------------+
+; Option ; Setting ; Default Value ;
++--------+---------+---------------+
 
 
-+--------------------------------------------+
-; Assembler Generated Files                  ;
-+--------------------------------------------+
-; File Name                                  ;
-+--------------------------------------------+
-; F:/proj/ssrv-fpga/fpga/DE2_115/DE2_115.sof ;
-+--------------------------------------------+
++-----------------------------------------------+
+; Assembler Generated Files                     ;
++-----------------------------------------------+
+; File Name                                     ;
++-----------------------------------------------+
+; F:/rvproj/ssrv-pipe3/fpga/DE2_115/DE2_115.sof ;
++-----------------------------------------------+
 
 
-+----------------------------------------------------------------------+
-; Assembler Device Options: F:/proj/ssrv-fpga/fpga/DE2_115/DE2_115.sof ;
-+----------------+-----------------------------------------------------+
-; Option         ; Setting                                             ;
-+----------------+-----------------------------------------------------+
-; JTAG usercode  ; 0x01917F49                                          ;
-; Checksum       ; 0x01917F49                                          ;
-+----------------+-----------------------------------------------------+
++-------------------------------------------------------------------------+
+; Assembler Device Options: F:/rvproj/ssrv-pipe3/fpga/DE2_115/DE2_115.sof ;
++----------------+--------------------------------------------------------+
+; Option         ; Setting                                                ;
++----------------+--------------------------------------------------------+
+; JTAG usercode  ; 0x022DF50C                                             ;
+; Checksum       ; 0x022DF50C                                             ;
++----------------+--------------------------------------------------------+
 
 
 +--------------------+
@@ -103,15 +77,15 @@ refer to the applicable agreement for further details.
 Info: *******************************************************************
 Info: Running Quartus Prime Assembler
     Info: Version 18.0.0 Build 614 04/24/2018 SJ Standard Edition
-    Info: Processing started: Fri Mar 13 10:28:28 2020
-Info: Command: quartus_asm --read_settings_files=on --write_settings_files=off DE2_115 -c DE2_115
+    Info: Processing started: Thu Aug 06 14:08:01 2020
+Info: Command: quartus_asm --read_settings_files=off --write_settings_files=off DE2_115 -c DE2_115
 Warning (18236): Number of processors has not been specified which may cause overloading on shared machines.  Set the global assignment NUM_PARALLEL_PROCESSORS in your QSF to an appropriate value for best performance.
 Info (115031): Writing out detailed assembly data for power analysis
 Info (115030): Assembler is generating device programming files
 Info: Quartus Prime Assembler was successful. 0 errors, 1 warning
-    Info: Peak virtual memory: 616 megabytes
-    Info: Processing ended: Fri Mar 13 10:28:37 2020
-    Info: Elapsed time: 00:00:09
-    Info: Total CPU time (on all processors): 00:00:07
+    Info: Peak virtual memory: 650 megabytes
+    Info: Processing ended: Thu Aug 06 14:08:11 2020
+    Info: Elapsed time: 00:00:10
+    Info: Total CPU time (on all processors): 00:00:08
 
 

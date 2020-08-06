@@ -18,11 +18,14 @@
 
 `include "define.v"
 
+`define  TIMING_STYLE
+
 module schedule(
 
     input                                                                    clk,
     input                                                                    rst,
  
+    output `N(`SDBUF_OFF)                                                    sdbuf_left_num, 
     input  `N(`FETCH_LEN)                                                    fetch_vld,
     input  `N(`FETCH_LEN*`XLEN)                                              fetch_instr,
     input  `N(`FETCH_LEN*`XLEN)                                              fetch_pc,
@@ -33,21 +36,19 @@ module schedule(
 	output reg `N(`EXEC_LEN*`XLEN)                                           exec_instr,
 	output reg `N(`EXEC_LEN*`XLEN)                                           exec_pc,	
 	output reg `N(`EXEC_LEN*`EXEC_PARA_LEN)                                  exec_para,
+	output reg `N(`EXEC_LEN*`JCBUF_OFF)                                      exec_level,	
 	output reg `N(`EXEC_LEN*`MMCMB_OFF)                                      exec_order,
-	output reg `N(`EXEC_LEN*`JCBUF_OFF)                                      exec_level,
  
-	input                                                                    mmbuf_check_flag,
 	input  `N(`RGBIT)                                                        mmbuf_check_rdnum,
 	input  `N(`RGLEN)                                                        mmbuf_check_rdlist,
-	input  `N(`RGLEN)                                                        mmbuf_level_rdlist,
+	input  `N(`RGLEN)                                                        mmbuf_instr_rdlist,
 	input  `N(`MMBUF_OFF)                                                    mmbuf_mem_num,
 	input  `N(`RFBUF_OFF)                                                    rfbuf_alu_num,
-    input                                                                    mem_release,
+    input  `N(`MEM_OFF)                                                      mem_release,
     input                                                                    clear_pipeline,
 	input                                                                    level_decrease,
 	input                                                                    level_clear,
-    output `N(`SDBUF_OFF)                                                    sdbuf_left_num,
-    output `N(`RGLEN)                                                        pipeline_level_rdlist,
+    output `N(`RGLEN)                                                        pipeline_instr_rdlist,
     output                                                                   pipeline_is_empty,	
 	output                                                                   schd_intflag,
     output `N(`XLEN)                   	                                     schd_intpc
@@ -59,33 +60,75 @@ module schedule(
     //---------------------------------------------------------------------------
 
     `include "include_func.v"
+
+`ifdef TIMING_STYLE
+    function check_hard( input `N(`EXEC_PARA_LEN) a_para,b_para );
+		reg a_mem,a_alu,b_mem,b_alu;
+		reg `N(`RGBIT) a_rs0,a_rs1,a_rd,b_rs0,b_rs1,b_rd;
+	begin
+		a_mem      = (a_para>>((3*`RGBIT)+1));
+		a_alu      = (a_para>>(3*`RGBIT));
+		a_rs0      = a_para;
+		a_rs1      = a_para>>`RGBIT;
+		a_rd       = a_para>>(2*`RGBIT);
+		b_mem      = (b_para>>((3*`RGBIT)+1));
+		b_alu      = (b_para>>(3*`RGBIT));	
+		b_rs0      = b_para;
+		b_rs1      = b_para>>`RGBIT;
+		b_rd       = b_para>>(2*`RGBIT);		
+
+        check_hard =  (a_rd!=0)&(((a_rd==b_rs0)|(a_rd==b_rs1))|(a_mem&(a_rd==b_rd)));	
 	
-	function check_both( input `N(`EXEC_PARA_LEN) para, input `N(`RGLEN) rd_list,rs_list );
+	end
+	endfunction
+
+    function check_soft( input `N(`EXEC_PARA_LEN) a_para,b_para );
+		reg  a_mem,a_alu,b_mem,b_alu;
+		reg `N(`RGBIT) a_rs0,a_rs1,a_rd,b_rs0,b_rs1,b_rd;
+	begin
+		a_mem      = (a_para>>((3*`RGBIT)+1));
+		a_alu      = (a_para>>(3*`RGBIT));
+		a_rs0      = a_para;
+		a_rs1      = a_para>>`RGBIT;
+		a_rd       = a_para>>(2*`RGBIT);
+		b_mem      = (b_para>>((3*`RGBIT)+1));
+		b_alu      = (b_para>>(3*`RGBIT));	
+		b_rs0      = b_para;
+		b_rs1      = b_para>>`RGBIT;
+		b_rd       = b_para>>(2*`RGBIT);		
+	
+	    check_soft = (b_rd!=0)&((a_rs0==b_rd)|(a_rs1==b_rd)|(a_alu&(a_rd==b_rd)));	
+	
+	end
+	endfunction
+
+`endif	
+	
+	function check_blacklist( input `N(`EXEC_PARA_LEN) para, input `N(`RGLEN) rd_list,rs_list );
         reg `N(`RGBIT) rs0,rs1,rd;	
         reg    rd_hit, rs_hit;		
 	begin
-        rs0        = para;
-		rs1        = para>>`RGBIT;
-		rd         = para>>(2*`RGBIT);
+        rs0             = para;
+		rs1             = para>>`RGBIT;
+		rd              = para>>(2*`RGBIT);
         
-        rd_hit     = |( ( rd_list & `LASTBIT_MASK ) & ( 1'b1<<rd ) );
-        rs_hit     = |( ( rs_list & `LASTBIT_MASK ) & ( ( 1'b1<<rs0 )|( 1'b1<<rs1 ) ) );
+        rd_hit          = |( ( rd_list & `LASTBIT_MASK ) & ( 1'b1<<rd ) );
+        rs_hit          = |( ( rs_list & `LASTBIT_MASK ) & ( ( 1'b1<<rs0 )|( 1'b1<<rs1 ) ) );
         
-        check_both = rd_hit|rs_hit; 		
+        check_blacklist = rd_hit|rs_hit; 		
 	end
 	endfunction
-	
+		
 	function check_gray( input `N(`EXEC_PARA_LEN) para, input `N(`RGBIT) gray_num );
         reg `N(`RGBIT) rs0,rs1,rd;	 
 	begin
-        rs0        = para;
-		rs1        = para>>`RGBIT;
-		rd         = para>>(2*`RGBIT);
+        rs0             = para;
+		rs1             = para>>`RGBIT;
+		rd              = para>>(2*`RGBIT);
 
-        check_gray = |( ( ( 1'b1<<gray_num ) & `LASTBIT_MASK ) & ( (1'b1<<rs0)|(1'b1<<rs1)|(1'b1<<rd) ) );		
+        check_gray      = ((rs0==gray_num)|(rs1==gray_num)|(rd==gray_num))&(gray_num!=0);		
 	end
 	endfunction
-	
 	
     //---------------------------------------------------------------------------
     //signal defination
@@ -99,11 +142,15 @@ module schedule(
 	wire `N(`SDBUF_LEN*`EXEC_PARA_LEN)       go_para;
 	wire `N(`SDBUF_LEN*`MMCMB_OFF)           go_order;
 	wire `N(`SDBUF_LEN*`JCBUF_OFF)           go_level;
-	wire `N(`SDBUF_LEN)                      go_hit;
-	wire `N(`SDBUF_LEN)                      go_preload;
+	wire `N(`SDBUF_LEN)                      go_stay;
 
+	wire `N(`RGBIT)                          check_num;
+	wire `N(`RGLEN)                          check_rdlist;	
+
+`ifndef TIMING_STYLE
     wire `N(`RGLEN)                          rd_checklist             `N(`SDBUF_LEN+1);
 	wire `N(`RGLEN)                          rs_checklist             `N(`SDBUF_LEN+1);
+`endif	
     wire `N(`MMBUF_LEN)                      mem_active               `N(`SDBUF_LEN+1);
     wire `N(`RFBUF_LEN)                      rf_active                `N(`SDBUF_LEN+1);
     wire `N(`EXEC_LEN)                       exec_active              `N(`SDBUF_LEN+1);
@@ -127,18 +174,12 @@ module schedule(
 	wire `N(`SDBUF_LEN*`JCBUF_OFF)           chain_sdbuf_level        `N(`SDBUF_LEN+1);
 	
 	wire `N(`SDBUF_OFF)                      chain_sdexec_mem_num     `N(`SDBUF_LEN+1);
-	wire `N(`RGLEN)                          chain_sdbuf_level_rdlist `N(`SDBUF_LEN+1);		
+	wire `N(`RGLEN)                          chain_sdbuf_instr_rdlist `N(`SDBUF_LEN+1);		
 	
 	wire `N(`EXEC_OFF)                       chain_exec_mem_num0      `N(`SDBUF_LEN+1);
 	wire `N(`EXEC_OFF)                       chain_exec_mem_num1      `N(`SDBUF_LEN+1);	
 	wire `N(`EXEC_OFF)                       chain_exec_alu_num0      `N(`SDBUF_LEN+1);
 	wire `N(`EXEC_OFF)                       chain_exec_alu_num1      `N(`SDBUF_LEN+1);	
-	wire                                     chain_check_flag0        `N(`SDBUF_LEN+1);
-	wire                                     chain_check_flag1        `N(`SDBUF_LEN+1);
-	wire `N(`RGBIT)                          chain_check_rdnum0       `N(`SDBUF_LEN+1);
-	wire `N(`RGBIT)                          chain_check_rdnum1       `N(`SDBUF_LEN+1);
-	wire `N(`RGLEN)                          chain_check_rdlist0      `N(`SDBUF_LEN+1);
-	wire `N(`RGLEN)                          chain_check_rdlist1      `N(`SDBUF_LEN+1);	
 	
 	wire                                     chain_find_mem           `N(`SDBUF_LEN+1);
 	wire `N(`XLEN)                           chain_find_pc            `N(`SDBUF_LEN+1);		
@@ -157,7 +198,7 @@ module schedule(
 	reg  `N(`SDBUF_OFF)                      sdbuf_length;
 
     reg  `N(`SDBUF_OFF)                      sdexec_mem_num;
-	reg  `N(`RGLEN)                          sdbuf_level_rdlist;
+	reg  `N(`RGLEN)                          sdbuf_instr_rdlist;
 	
 	reg  `N(`EXEC_OFF)                       exec_mem_num0;
 	reg  `N(`EXEC_OFF)                       exec_mem_num1;
@@ -171,9 +212,6 @@ module schedule(
 	reg  `N(`RGLEN)                          exec_check_rdlist0;
 	reg  `N(`RGLEN)                          exec_check_rdlist1;
 	wire `N(`RGLEN)                          exec_check_rdlist;
-		
-	wire `N(`RGBIT)                          check_num;
-	wire `N(`RGLEN)                          check_rdlist;
 	
     genvar i,j;
     //---------------------------------------------------------------------------
@@ -208,8 +246,13 @@ module schedule(
 	assign                              go_order = sdbuf_order|(fetch_order<<(sdbuf_length*`MMCMB_OFF));
 	assign                              go_level = sdbuf_level|(fetch_level<<(sdbuf_length*`JCBUF_OFF));
 
+	assign                             check_num = mmbuf_check_rdnum;
+	assign                          check_rdlist = mmbuf_check_rdlist;
+
+`ifndef TIMING_STYLE
     assign                       rd_checklist[0] = check_rdlist;
 	assign                       rs_checklist[0] = check_rdlist;
+`endif	
     assign                         mem_active[0] = {`MMBUF_LEN{1'b1}}>>(mmbuf_mem_num + exec_mem_num);     //membuf left space
     assign                          rf_active[0] = {`RFBUF_LEN{1'b1}}>>(rfbuf_alu_num + exec_alu_num);     //rfbuf left space
     assign                        exec_active[0] = {`EXEC_LEN{1'b1}};	
@@ -233,18 +276,12 @@ module schedule(
 	assign                  chain_sdbuf_level[0] = 0;		
 	
 	assign               chain_sdexec_mem_num[0] = 0;
-	assign           chain_sdbuf_level_rdlist[0] = 0;
+	assign           chain_sdbuf_instr_rdlist[0] = 0;
 	
     assign                chain_exec_mem_num0[0] = 0;
     assign                chain_exec_mem_num1[0] = 0;	
     assign                chain_exec_alu_num0[0] = 0;
-    assign                chain_exec_alu_num1[0] = 0;	
-    assign                  chain_check_flag0[0] = 0;
-    assign                  chain_check_flag1[0] = 0;	
-    assign                 chain_check_rdnum0[0] = 0;
-    assign                 chain_check_rdnum1[0] = 0;	
-    assign                chain_check_rdlist0[0] = 0;
-    assign                chain_check_rdlist1[0] = 0;		
+    assign                chain_exec_alu_num1[0] = 0;		
 	
 	assign                     chain_find_mem[0] = 0;
 	assign                      chain_find_pc[0] = 0;	
@@ -266,25 +303,52 @@ module schedule(
 		wire `N(`JCBUF_OFF)               levelx = sub_level(level,level_decrease);
 		wire                          level_zero = (level==0)|((level==1)&level_decrease);
 
+`ifdef TIMING_STYLE
+        wire                          hit_common = check_blacklist(para,check_rdlist,check_rdlist);
+		
+        wire  hit_hard,hit_soft;
+		if (i==0) begin:gen_hit_zero
+		    assign                      hit_hard = 0;
+			assign                      hit_soft = 0;
+		end else begin:gen_hit_other
+		    wire `N(i) bits_hard, bits_soft;
+			
+			for (j=0;j<i;j=j+1) begin:gen_relation
+			    assign              bits_hard[j] = go_vld[j] & check_hard(go_para[`IDX(j,`EXEC_PARA_LEN)],go_para[`IDX(i,`EXEC_PARA_LEN)]);
+				assign              bits_soft[j] = go_stay[j] & check_soft(go_para[`IDX(j,`EXEC_PARA_LEN)],go_para[`IDX(i,`EXEC_PARA_LEN)]);
+			end
+			
+			assign                      hit_hard = |bits_hard;
+			assign                      hit_soft = |bits_soft;
+		end		
+
+        wire                              hit_rg = hit_common|hit_hard|hit_soft; 
+`else
+        wire                              hit_rg = check_blacklist(para,rd_checklist[i],rs_checklist[i]);
+`endif
+
         wire                           exec_idle = exec_active[i];
 		wire                            mem_idle = mem_active[i];
 		wire                             rf_idle = rf_active[i];
-		wire                              rg_hit = check_both(para,rd_checklist[i],rs_checklist[i]);
 		
-		assign                         go_hit[i] = rg_hit|(~exec_idle)|(mem & ~mem_idle)|(alu & ~rf_idle);
-		assign                     go_preload[i] = check_gray(para,check_num);
+		wire                                 hit = hit_rg|(~exec_idle)|(mem & ~mem_idle)|(alu & ~rf_idle);
+		wire                             preload = check_gray(para,check_num);
 		
-		wire                            alu2exec = alu & go_vld[i] & ~go_hit[i];
-		wire                           alu2sdbuf = alu & go_vld[i] & (go_hit[i]|go_preload[i]);
-		wire                            mem2exec = mem & go_vld[i] & ~go_hit[i];
-		wire                           mem2sdbuf = mem & go_vld[i] & (go_hit[i]|go_preload[i]);
+		wire                            alu2exec = go_vld[i] & alu & ~hit;
+		wire                           alu2sdbuf = go_vld[i] & alu & (hit|preload);
+		wire                            mem2exec = go_vld[i] & mem & ~hit;
+		wire                           mem2sdbuf = go_vld[i] & mem & (hit|preload);
+		
+		assign                        go_stay[i] = alu2sdbuf|mem2sdbuf;
 		
         //variable update
+`ifndef TIMING_STYLE		
         assign                 rd_checklist[i+1] = rd_checklist[i]|(alu2sdbuf<<rd)|(alu2sdbuf<<rs0)|(alu2sdbuf<<rs1)|(mem2exec<<rd)|(mem2sdbuf<<rd)|(mem2sdbuf<<rs0)|(mem2sdbuf<<rs1);
-        assign                 rs_checklist[i+1] = rs_checklist[i]|(alu2exec<<rd)|(alu2sdbuf<<rd)|(mem2exec<<rd)|(mem2sdbuf<<rd);		
+        assign                 rs_checklist[i+1] = rs_checklist[i]|(alu2exec<<rd)|(alu2sdbuf<<rd)|(mem2exec<<rd)|(mem2sdbuf<<rd);
+`endif		
         assign                  exec_active[i+1] = exec_active[i]>>( alu2exec|mem2exec );
 		assign                   mem_active[i+1] = mem2sdbuf ? 0 : (mem_active[i]>>mem2exec);
-		assign                    rf_active[i+1] = rf_active[i]>>( alu2exec|alu2sdbuf );
+		assign                    rf_active[i+1] = rf_active[i]>>alu2exec;
 		assign                     exec_num[i+1] = exec_num[i] + ( alu2exec|mem2exec );
 		assign                    sdbuf_num[i+1] = sdbuf_num[i] + ( alu2sdbuf|mem2sdbuf );
 
@@ -294,8 +358,8 @@ module schedule(
 		//special instruction should be assigned to the last exec ALU.
         wire `N(`EXEC_OFF)            exec_shift = ( alu2exec|mem2exec ) ?  exec_num[i] : `EXEC_LEN;
 
-		assign            chain_exec_direct[i+1] = chain_exec_direct[i]|( ((clear|go_preload[i]) ? 1'b0 : 1'b1)<<exec_shift );
-        assign           chain_exec_preload[i+1] = chain_exec_preload[i]|( ( clear ? 1'b0 : go_preload[i] )<<exec_shift );	
+		assign            chain_exec_direct[i+1] = chain_exec_direct[i]|( ((clear|preload) ? 1'b0 : 1'b1)<<exec_shift );
+        assign           chain_exec_preload[i+1] = chain_exec_preload[i]|( ( clear ? 1'b0 : preload )<<exec_shift );	
 		assign             chain_exec_instr[i+1] = chain_exec_instr[i]|( instr<<(exec_shift*`XLEN) );
 		assign                chain_exec_pc[i+1] = chain_exec_pc[i]|( pc<<(exec_shift*`XLEN) );
 		assign              chain_exec_para[i+1] = chain_exec_para[i]|( para<<(exec_shift*`EXEC_PARA_LEN) );
@@ -304,8 +368,8 @@ module schedule(
 		
 		wire `N(`SDBUF_OFF)          sdbuf_shift = ( alu2sdbuf|mem2sdbuf ) ? sdbuf_num[i] : `SDBUF_LEN;
 		
-		assign           chain_sdbuf_direct[i+1] = chain_sdbuf_direct[i]|( (clear ? 1'b0 : go_hit[i])<<sdbuf_shift );
-		assign          chain_sdbuf_preload[i+1] = chain_sdbuf_preload[i]|( ((clear|go_hit[i]) ? 1'b0 : 1'b1)<<sdbuf_shift );
+		assign           chain_sdbuf_direct[i+1] = chain_sdbuf_direct[i]|( (clear ? 1'b0 : hit)<<sdbuf_shift );
+		assign          chain_sdbuf_preload[i+1] = chain_sdbuf_preload[i]|( ((clear|hit) ? 1'b0 : 1'b1)<<sdbuf_shift );
 		assign            chain_sdbuf_instr[i+1] = chain_sdbuf_instr[i]|( instr<<(sdbuf_shift*`XLEN) );
 		assign               chain_sdbuf_pc[i+1] = chain_sdbuf_pc[i]|( pc<<(sdbuf_shift*`XLEN) );
 		assign             chain_sdbuf_para[i+1] = chain_sdbuf_para[i]|(para<<(sdbuf_shift*`EXEC_PARA_LEN));
@@ -313,23 +377,17 @@ module schedule(
         assign            chain_sdbuf_level[i+1] = chain_sdbuf_level[i]|(levelx<<(sdbuf_shift*`JCBUF_OFF));	
 
         assign         chain_sdexec_mem_num[i+1] = chain_sdexec_mem_num[i] + ( go_vld[i] & mem & ~clear );
-		assign     chain_sdbuf_level_rdlist[i+1] = chain_sdbuf_level_rdlist[i]|( ( go_vld[i] & level_zero & ~clear )<<rd );		
+		assign     chain_sdbuf_instr_rdlist[i+1] = chain_sdbuf_instr_rdlist[i]|( ( go_vld[i] & level_zero & ~clear )<<rd );		
 		
-		wire                 mem_exclude_preload = mem2exec & ~go_preload[i] & ~clear;		
+		wire                 mem_exclude_preload = mem2exec & ~preload & ~clear;		
 		wire                 mem_include_preload = mem2exec & ~clear;
-		wire                 alu_exclude_preload = alu2exec & ~go_preload[i] & ~clear;			
+		wire                 alu_exclude_preload = alu2exec & ~preload & ~clear;			
 		wire                 alu_include_preload = alu2exec & ~clear;	
 		
         assign          chain_exec_mem_num0[i+1] = chain_exec_mem_num0[i] + mem_exclude_preload;
 		assign          chain_exec_mem_num1[i+1] = chain_exec_mem_num1[i] + mem_include_preload;
         assign          chain_exec_alu_num0[i+1] = chain_exec_alu_num0[i] + alu_exclude_preload;
 		assign          chain_exec_alu_num1[i+1] = chain_exec_alu_num1[i] + alu_include_preload;
-		assign            chain_check_flag0[i+1] = chain_check_flag0[i]|mem_exclude_preload;
-		assign            chain_check_flag1[i+1] = chain_check_flag1[i]|mem_include_preload;
-		assign           chain_check_rdnum0[i+1] = ( ~chain_check_flag0[i] & mem_exclude_preload ) ? rd : chain_check_rdnum0[i];
-		assign           chain_check_rdnum1[i+1] = ( ~chain_check_flag1[i] & mem_include_preload ) ? rd : chain_check_rdnum1[i];	
-		assign          chain_check_rdlist0[i+1] = chain_check_rdlist0[i]|( ( chain_check_flag0[i]&mem_exclude_preload )<<rd );
-		assign          chain_check_rdlist1[i+1] = chain_check_rdlist1[i]|( ( chain_check_flag1[i]&mem_include_preload )<<rd );
 		
 		assign               chain_find_mem[i+1] = chain_find_mem[i]|( go_vld[i] & mem & (levelx==0) );
 		assign                chain_find_pc[i+1] = chain_find_mem[i] ? chain_find_pc[i] : pc;			
@@ -344,7 +402,7 @@ module schedule(
 	`FFx(exec_preload,0)
 	exec_preload <= chain_exec_preload[`SDBUF_LEN];
 	
-	assign exec_vld = exec_direct|( exec_preload & {`EXEC_LEN{mem_release} } );
+	assign exec_vld = exec_direct|( exec_preload & {`EXEC_LEN{(mem_release!=0)} } );
 	
 	`FFx(exec_instr,0)
 	exec_instr <= chain_exec_instr[`SDBUF_LEN];
@@ -369,7 +427,7 @@ module schedule(
 	`FFx(sdbuf_preload,0)
 	sdbuf_preload <= chain_sdbuf_preload[`SDBUF_LEN];
 
-    assign sdbuf_vld = sdbuf_direct|( sdbuf_preload & ( mem_release ? 0 : {`SDBUF_LEN{1'b1}} ) );
+    assign sdbuf_vld = sdbuf_direct|( sdbuf_preload & ( (mem_release!=0) ? 0 : {`SDBUF_LEN{1'b1}} ) );
 	
 	`FFx(sdbuf_instr,0)
 	sdbuf_instr <= chain_sdbuf_instr[`SDBUF_LEN];
@@ -393,8 +451,9 @@ module schedule(
     `FFx(sdexec_mem_num,0)
     sdexec_mem_num <= chain_sdexec_mem_num[`SDBUF_LEN];
   
- 	`FFx(sdbuf_level_rdlist,0)
-	sdbuf_level_rdlist <= chain_sdbuf_level_rdlist[`SDBUF_LEN]; 
+ 	`FFx(sdbuf_instr_rdlist,0)
+	sdbuf_instr_rdlist <= chain_sdbuf_instr_rdlist[`SDBUF_LEN]; 
+	
 	
     `FFx(exec_mem_num0,0)
     exec_mem_num0 <= chain_exec_mem_num0[`SDBUF_LEN];
@@ -402,7 +461,7 @@ module schedule(
     `FFx(exec_mem_num1,0)
     exec_mem_num1 <= chain_exec_mem_num1[`SDBUF_LEN];	
 	
-	assign exec_mem_num = mem_release ? exec_mem_num1 : exec_mem_num0;
+	assign exec_mem_num = (mem_release!=0) ? exec_mem_num1 : exec_mem_num0;
  
     `FFx(exec_alu_num0,0)
     exec_alu_num0 <= chain_exec_alu_num0[`SDBUF_LEN];	
@@ -410,33 +469,17 @@ module schedule(
     `FFx(exec_alu_num1,0)
     exec_alu_num1 <= chain_exec_alu_num1[`SDBUF_LEN];		
 	
-	assign exec_alu_num = mem_release ? exec_alu_num1 : exec_alu_num0;
+	assign exec_alu_num = (mem_release!=0) ? exec_alu_num1 : exec_alu_num0;
 	
-	`FFx(exec_check_rdnum0,0)
-	exec_check_rdnum0 <= chain_check_rdnum0[`SDBUF_LEN];	
+	assign         sdbuf_left_num = `SDBUF_LEN - sdbuf_length;
 	
-	`FFx(exec_check_rdnum1,0)
-	exec_check_rdnum1 <= chain_check_rdnum1[`SDBUF_LEN];		
+	assign  pipeline_instr_rdlist = mmbuf_instr_rdlist|sdbuf_instr_rdlist;
 	
-	assign exec_check_rdnum = mem_release ? exec_check_rdnum1 : exec_check_rdnum0;
-	
-	`FFx(exec_check_rdlist0,0)
-	exec_check_rdlist0 <= chain_check_rdlist0[`SDBUF_LEN];	
-	
-	`FFx(exec_check_rdlist1,0)
-	exec_check_rdlist1 <= chain_check_rdlist1[`SDBUF_LEN];		
-	
-	assign exec_check_rdlist = mem_release ? exec_check_rdlist1 : exec_check_rdlist0;	
-	
-	assign check_num = mmbuf_check_flag ? mmbuf_check_rdnum : exec_check_rdnum;
-	
-	assign check_rdlist = mmbuf_check_rdlist|( mmbuf_check_flag ? ( 1'b1<<exec_check_rdnum ) : 0 )|exec_check_rdlist;
-	
-	assign                           sdbuf_left_num = `SDBUF_LEN - sdbuf_length;
-	assign                    pipeline_level_rdlist = mmbuf_level_rdlist|sdbuf_level_rdlist;
-	assign                        pipeline_is_empty = (mmbuf_mem_num==0)&(rfbuf_alu_num==0)&(sdbuf_length==0)&(exec_direct==0);
-    assign                             schd_intflag = chain_find_mem[`SDBUF_LEN];
-    assign                               schd_intpc = chain_find_mem[`SDBUF_LEN] ? chain_find_pc[`SDBUF_LEN] : fetch_pc;
+	assign      pipeline_is_empty = (mmbuf_mem_num==0)&(rfbuf_alu_num==0)&(sdbuf_length==0)&(exec_direct==0);
+    
+	assign           schd_intflag = chain_find_mem[`SDBUF_LEN];
+    
+	assign             schd_intpc = chain_find_mem[`SDBUF_LEN] ? chain_find_pc[`SDBUF_LEN] : fetch_pc;
 
 endmodule
 

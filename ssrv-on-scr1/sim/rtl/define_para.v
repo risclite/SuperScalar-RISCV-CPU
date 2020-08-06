@@ -21,16 +21,16 @@
 `define USE_SSRV                                         //comment for SCR1 core working; others SSRV do
 //`define WIDE_INSTR_BUS                                   //SCR1 core simulation couldn't supply more than 32-bit BUS, if BUS_LEN is not 1, this defination should work. 
 //`define BENCHMARK_LOG                                    //In benchmark test,there is a log for instructions execuated.
-
+//`define INSTR_MISALLIGNED
 
 //-------------------------------------------------------------------------------
 // Recommended core architecture configurations (modifiable)
 //-------------------------------------------------------------------------------
-//4 or 5 stages
+//4 or 5 stages implementation
 `define FETCH_REGISTERED 
 
 //How many hardware multiplier/divider.
-`define MULT_NUM               1
+`define MULT_NUM               2
 
 //-------------------------------------------------------------------------------
 //"instrbits" buffer
@@ -38,18 +38,18 @@
 //The bus width of AHB-lite or AXI: 1 --- 32 bits  2 --- 64 bits, 4 ---- 128 bits. Only 2^x is allowed. If it is bigger than 1, WIDE_INSTR_BUS should be defined.
 `define BUFFER0_IN_LEN         1
 //How many words it holds:  1 --- 32 bits, 2 --- 64 bits. Any integer
-`define BUFFER0_BUF_LEN        (4*`BUFFER0_IN_LEN) 
+`define BUFFER0_BUF_LEN        7//(2*`BUFFER0_IN_LEN) 
 //How many instructions are generated to the next stage. 1 --- 1 instr, 2 -- 2 instr, Any integer
-`define BUFFER0_OUT_LEN        2
+`define BUFFER0_OUT_LEN        3
 
 //-------------------------------------------------------------------------------
 //"schedule" buffer
 //-------------------------------------------------------------------------------
 //no IN_LEN, because it equals to BUFFER0_OUT_LEN
 //How many instructions are kept. 1 -- 1 instr, 2-- 2 instr, Any integer
-`define BUFFER1_BUF_LEN        4
+`define BUFFER1_BUF_LEN        6
 //How many instructions are generated for multiple exec units. 1-- 1 instr, 2 -- 2 instr, Any integer
-`define BUFFER1_OUT_LEN        2
+`define BUFFER1_OUT_LEN        3
 
 //-------------------------------------------------------------------------------
 //"membuf" buffer
@@ -57,7 +57,8 @@
 //no IN_LEN, because it equals to BUFFER1_OUT_LEN
 //How many MEM instructions are kept. 1 -- 1 instr, 2-- 2 instr, Any integer
 `define BUFFER2_BUF_LEN        6//(2*`BUFFER1_OUT_LEN) 
-//no OUT_LEN, it equals to 1
+//How many LSU/MUL instructions to be retired at the same clock, it could be 1 or 2 instructions.
+`define BUFFER2_OUT_LEN        2
 
 //-------------------------------------------------------------------------------
 //"mprf" buffer
@@ -82,12 +83,16 @@
 `define XLEN                   32
 `define BUS_LEN                `BUFFER0_IN_LEN                                                //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0], it should be 1,2,4,8,16... etc
 `define BUS_WID                (`BUS_LEN*`XLEN)                                               //1->HRDATA[31:0]  2->HRDATA[63:0] 4->HRDATA[127:0]  
+`ifdef INSTR_MISALLIGNED
+`define PC_ALIGN               {`XLEN{1'b1}}
+`else
 `define PC_ALIGN               ( ((1'b1<<`XLEN)-1)^( (1'b1<<($clog2(`BUS_LEN)+2))-1'b1 ) )    //1->FFFFFFFC 2->FFFFFFF8 4->FFFFFFF0
+`endif
 
 //predictor.v
 `define PDT_LEN                16
 `define PDT_OFF                $clog2(`PDT_LEN+1)
-`define PDT_ADDR               12
+`define PDT_ADDR               10
 `define PDT_BLEN               5
 
 //instrbits.v
@@ -116,7 +121,8 @@
 `define MMBUF_LEN              `BUFFER2_BUF_LEN
 `define MMBUF_OFF              $clog2(`MMBUF_LEN+1)
 `define MMBUF_PARA_LEN         10
-`define MMAREA_LEN             ( (`MMBUF_LEN>=6) ? 6 : `MMBUF_LEN )
+`define MEM_LEN                `BUFFER2_OUT_LEN
+`define MEM_OFF                $clog2(`MEM_LEN+1)
 
 //mprf.v
 `define RFBUF_LEN              `BUFFER3_BUF_LEN
@@ -130,5 +136,6 @@
 `define MULBUF_LEN             1
 `define MULBUF_OFF             $clog2(`MULBUF_LEN+1)
 
-
-
+//lsu.v
+`define LSUBUF_LEN             2
+`define LSUBUF_OFF             $clog2(`LSUBUF_LEN+1)

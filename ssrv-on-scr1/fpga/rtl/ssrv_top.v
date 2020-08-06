@@ -62,23 +62,24 @@ module ssrv_top(
 
 );
 
+
     //instrman
     wire                                 jump_vld;
     wire `N(`XLEN)                       jump_pc;
     wire                                 branch_vld;
     wire `N(`XLEN)                       branch_pc;	
 	wire                                 buffer_free;	
-    wire                                 instr_vld;
-    wire `N(`BUS_WID)                    instr_data;
-    wire                                 instr_err;
+	
+	wire                                 imem_vld;
+	wire `N(`BUS_WID)                    imem_instr;
+	wire                                 imem_status;
 
     //predictor
-	wire `N(2*`BUS_LEN)                  instr_predict;
+	wire `N(2*`BUS_LEN)                  imem_predict;
 	wire                                 jcond_vld;
 	wire `N(`XLEN)                       jcond_pc;
 	wire                                 jcond_hit;
-	wire                                 jcond_satisfied;
-
+	wire                                 jcond_taken;
 
 	//connection for instrbits
 	wire                                 sys_vld;
@@ -91,18 +92,20 @@ module ssrv_top(
 	wire `N(`XLEN)                       csr_rs;
     wire `N(`RGBIT)                      csr_rd_sel;	
 
-    wire `N(`RGBIT)                      extra_rs0_sel,extra_rs1_sel;
-    wire `N(`XLEN)                       extra_rs0_word,extra_rs1_word;	
+    wire `N(`RGBIT)                      extra_rs0_sel;
+	wire `N(`RGBIT)                      extra_rs1_sel;
+    wire `N(`XLEN)                       extra_rs0_word;
+	wire `N(`XLEN)                       extra_rs1_word;	
 
-	wire `N(`RGLEN)                      pipeline_level_rdlist;
-    wire                                 pipeline_is_empty;
     wire `N(`SDBUF_OFF)                  sdbuf_left_num;	
-
 	wire `N(`FETCH_LEN)                  fetch_vld;		
     wire `N(`FETCH_LEN*`XLEN)            fetch_instr;
 	wire `N(`FETCH_LEN*`XLEN)            fetch_pc;
     wire `N(`FETCH_LEN*`EXEC_PARA_LEN)   fetch_para;
 	wire `N(`FETCH_LEN*`JCBUF_OFF)       fetch_level;
+
+	wire `N(`RGLEN)                      pipeline_instr_rdlist;
+    wire                                 pipeline_is_empty;
 	
 	wire                                 level_decrease;
 	wire                                 level_clear;	
@@ -115,13 +118,12 @@ module ssrv_top(
     wire `N(`EXEC_LEN*`MMCMB_OFF)        exec_order;
     wire `N(`EXEC_LEN*`JCBUF_OFF)        exec_level;	
 
-	wire                                 mmbuf_check_flag;
 	wire `N(`RGBIT)                      mmbuf_check_rdnum;
 	wire `N(`RGLEN)                      mmbuf_check_rdlist;
-    wire `N(`RGLEN)                      mmbuf_level_rdlist;	
+    wire `N(`RGLEN)                      mmbuf_instr_rdlist;	
 	wire `N(`MMBUF_OFF)                  mmbuf_mem_num;	
 	wire `N(`RFBUF_OFF)                  rfbuf_alu_num;	
-	wire                                 mem_release;	
+	wire `N(`MEM_OFF)                    mem_release;	
 	wire                                 clear_pipeline;	
 
     //alu
@@ -135,8 +137,8 @@ module ssrv_top(
 	wire `N(`EXEC_LEN*`XLEN)             mem_wdata;	
 	
 	//connection for mprf
-	wire `N(`RGBIT)                      mem_sel; 
-	wire `N(`XLEN)                       mem_data;
+	wire `N(`MEM_LEN*`RGBIT)             mem_sel; 
+	wire `N(`MEM_LEN*`XLEN)              mem_data;
 	wire `N(`XLEN)                       csr_data;
 	wire `N(`RGLEN)                      rfbuf_order_list;
 	
@@ -149,10 +151,20 @@ module ssrv_top(
 	wire `N(`MUL_LEN*`XLEN)              mul_data;
     wire `N(`MUL_LEN)                    mul_ack;
 	
-    wire `N(`XLEN)                       mmbuf_int_pc;
-    wire `N(2)                           dmem_exception;	
+    wire                                 lsu_initial;
+	wire `N(`MMBUF_PARA_LEN)             lsu_para;
+	wire `N(`XLEN)                       lsu_addr;
+	wire `N(`XLEN)                       lsu_wdata;
+	wire                                 lsu_ready;
+	wire                                 lsu_finished;
+	wire                                 lsu_status;
+	wire `N(`XLEN)                       lsu_rdata;
+    wire                                 lsu_ack;	
+
   
 	//connection for sys_csr
+    wire `N(`XLEN)                       mmbuf_int_pc;
+    wire `N(2)                           dmem_exception;		
     wire                                 mem_busy;
 
 
@@ -165,8 +177,8 @@ module ssrv_top(
    
     .imem_req                   (    imem_req                 ),
     .imem_addr                  (    imem_addr                ),
-    .imem_rdata                 (    imem_rdata               ),
     .imem_resp                  (    imem_resp                ),
+	.imem_rdata                 (    imem_rdata               ),
 	.imem_err                   (    imem_err                 ),
 
     .jump_vld                   (    jump_vld                 ),
@@ -175,9 +187,9 @@ module ssrv_top(
 	.branch_pc                  (    branch_pc                ),
 	.buffer_free                (    buffer_free              ),
 	
-    .instr_vld                  (    instr_vld                ),
-    .instr_data                 (    instr_data               ),
-    .instr_err                  (    instr_err                )	
+	.imem_vld                   (    imem_vld                 ),
+	.imem_instr                 (    imem_instr               ),
+	.imem_status                (    imem_status              )
 
     );
 	
@@ -187,12 +199,12 @@ module ssrv_top(
 	
     .imem_req                   (    imem_req                 ),
     .imem_addr                  (    imem_addr                ),
-    .imem_predict               (    instr_predict            ),
+    .imem_predict               (    imem_predict             ),
 
     .jcond_vld                  (    jcond_vld                ),
     .jcond_pc                   (    jcond_pc                 ),
     .jcond_hit                  (    jcond_hit                ),
-    .jcond_satisfied            (    jcond_satisfied          )	
+    .jcond_taken                (    jcond_taken              )	
 
     );	
 	
@@ -200,6 +212,22 @@ module ssrv_top(
     instrbits i_bits(
     .clk                        (    clk                      ),
     .rst                        (    rst                      ), 
+
+    .jump_vld                   (    jump_vld                 ),
+    .jump_pc                    (    jump_pc                  ),
+    .branch_vld                 (    branch_vld               ),
+    .branch_pc                  (    branch_pc                ),
+    .buffer_free                (    buffer_free              ),	
+
+    .instr_vld                  (    imem_vld                 ),
+    .instr_data                 (    imem_instr               ),
+	.instr_err                  (    imem_status              ),
+	.instr_predict              (    imem_predict             ),	
+
+    .jcond_vld                  (    jcond_vld                ),
+    .jcond_pc                   (    jcond_pc                 ),
+    .jcond_hit                  (    jcond_hit                ),
+    .jcond_taken                (    jcond_taken              ),	
 
     .sys_vld                    (    sys_vld                  ),
     .sys_instr                  (    sys_instr                ),
@@ -210,47 +238,32 @@ module ssrv_top(
 	.csr_instr                  (    csr_instr                ),
 	.csr_rs                     (    csr_rs                   ),
 	.csr_rd_sel                 (    csr_rd_sel               ),
-    
-    .jump_vld                   (    jump_vld                 ),
-    .jump_pc                    (    jump_pc                  ),
-    .branch_vld                 (    branch_vld               ),
-    .branch_pc                  (    branch_pc                ),
-    .buffer_free                (    buffer_free              ),	
-    .instr_vld                  (    instr_vld                ),
-    .instr_data                 (    instr_data               ),
-	.instr_err                  (    instr_err                ),
-	.instr_predict              (    instr_predict            ),
 
     .rs0_sel                    (    extra_rs0_sel            ),
     .rs1_sel                    (    extra_rs1_sel            ),
     .rs0_word                   (    extra_rs0_word           ),
     .rs1_word                   (    extra_rs1_word           ),	
 
-	.pipeline_level_rdlist      (    pipeline_level_rdlist    ),
-	.pipeline_is_empty          (    pipeline_is_empty        ),
 	.sdbuf_left_num             (    sdbuf_left_num           ),
-
     .fetch_vld                  (    fetch_vld                ),	
     .fetch_instr                (    fetch_instr              ),
     .fetch_pc                   (    fetch_pc                 ),
     .fetch_para                 (    fetch_para               ),
     .fetch_level                (    fetch_level              ),
 
-    .jcond_vld                  (    jcond_vld                ),
-    .jcond_pc                   (    jcond_pc                 ),
-    .jcond_hit                  (    jcond_hit                ),
-    .jcond_satisfied            (    jcond_satisfied          ),
-
+	.pipeline_instr_rdlist      (    pipeline_instr_rdlist    ),
+	.pipeline_is_empty          (    pipeline_is_empty        ),
+	
     .level_decrease             (    level_decrease           ),
     .level_clear                (    level_clear              )	
 
     );                  
 
-
     schedule i_sch (
 	.clk                        (    clk                      ),
 	.rst                        (    rst                      ),
 
+	.sdbuf_left_num             (    sdbuf_left_num           ),
     .fetch_vld                  (    fetch_vld                ),
     .fetch_instr                (    fetch_instr              ),
     .fetch_pc                   (    fetch_pc                 ),
@@ -261,24 +274,23 @@ module ssrv_top(
     .exec_instr                 (    exec_instr               ),
     .exec_para                  (    exec_para                ),
     .exec_pc                    (    exec_pc                  ),
-    .exec_order                 (    exec_order               ),
     .exec_level                 (    exec_level               ),
+    .exec_order                 (    exec_order               ),
 	
-    .mmbuf_check_flag           (    mmbuf_check_flag         ),
     .mmbuf_check_rdnum          (    mmbuf_check_rdnum        ),	
     .mmbuf_check_rdlist         (    mmbuf_check_rdlist       ),
-	.mmbuf_level_rdlist         (    mmbuf_level_rdlist       ),
+	.mmbuf_instr_rdlist         (    mmbuf_instr_rdlist       ),
 	.mmbuf_mem_num              (    mmbuf_mem_num            ),	
 	.rfbuf_alu_num              (    rfbuf_alu_num            ),
 	.mem_release                (    mem_release              ),
 	.clear_pipeline             (    clear_pipeline           ),
 	.level_decrease             (    level_decrease           ),
-	.level_clear                (    level_clear              ),
-	.sdbuf_left_num             (    sdbuf_left_num           ),	
-    .pipeline_level_rdlist      (    pipeline_level_rdlist    ),
+	.level_clear                (    level_clear              ),	
+    .pipeline_instr_rdlist      (    pipeline_instr_rdlist    ),
 	.pipeline_is_empty          (    pipeline_is_empty        ),
 	.schd_intflag               (                             ),
     .schd_intpc                 (                             )	
+
 	);
 
 	generate
@@ -325,8 +337,8 @@ module ssrv_top(
 
 	.mem_sel                    (    mem_sel                  ),
 	.mem_data                   (    mem_data                 ),	
-
-    .mem_release                (    mem_release              ),	               
+    .mem_release                (    mem_release              ),	
+	
 	.clear_pipeline             (    clear_pipeline           ),
 	.level_decrease             (    level_decrease           ),
 	.level_clear                (    level_clear              ),
@@ -350,32 +362,7 @@ module ssrv_top(
 	.clk                        (    clk                      ),
 	.rst                        (    rst                      ),
    
-	.mem_vld                    (    mem_vld                  ),
-	.mem_para                   (    mem_para                 ),
-	.mem_addr                   (    mem_addr                 ),
-	.mem_wdata                  (    mem_wdata                ),
-	.mem_pc                     (    exec_pc                  ),
-    .mem_level                  (    exec_level               ),
-
-    .mem_sel                    (    mem_sel                  ),
-    .mem_data                   (    mem_data                 ),
-
-	.mem_release                (    mem_release              ),
-	.clear_pipeline             (    clear_pipeline           ),
-    .level_decrease             (    level_decrease           ),
-    .level_clear                (    level_clear              ),
-	.rfbuf_order_list           (    rfbuf_order_list         ),	
-    .mmbuf_check_flag           (    mmbuf_check_flag         ),
-    .mmbuf_check_rdnum          (    mmbuf_check_rdnum        ),	
-    .mmbuf_check_rdlist         (    mmbuf_check_rdlist       ),
-	.mmbuf_level_rdlist         (    mmbuf_level_rdlist       ),
-	.mmbuf_mem_num              (    mmbuf_mem_num            ),
-	.mmbuf_intflag              (                             ),
-	.mmbuf_intpc                (                             ),
-	.dmem_exception             (    dmem_exception           ),
-	.mem_busy                   (    mem_busy                 ),
-
-	.mul_initial                (    mul_initial              ),
+   	.mul_initial                (    mul_initial              ),
 	.mul_para                   (    mul_para                 ),
 	.mul_rs0                    (    mul_rs0                  ),
 	.mul_rs1                    (    mul_rs1                  ),
@@ -383,15 +370,39 @@ module ssrv_top(
 	.mul_finished               (    mul_finished             ),
 	.mul_data                   (    mul_data                 ),
 	.mul_ack                    (    mul_ack                  ),
-    
-    .dmem_req                   (    dmem_req                 ),
-    .dmem_cmd                   (    dmem_cmd                 ),
-    .dmem_width                 (    dmem_width               ),
-    .dmem_addr                  (    dmem_addr                ),
-    .dmem_wdata                 (    dmem_wdata               ),
-    .dmem_rdata                 (    dmem_rdata               ),
-    .dmem_resp                  (    dmem_resp                ),
-    .dmem_err                   (    dmem_err                 )	
+	
+	.lsu_initial                (    lsu_initial              ),
+	.lsu_para                   (    lsu_para                 ),
+	.lsu_addr                   (    lsu_addr                 ),
+	.lsu_wdata                  (    lsu_wdata                ),
+	.lsu_ready                  (    lsu_ready                ),
+	.lsu_finished               (    lsu_finished             ),
+	.lsu_status                 (    lsu_status               ),
+	.lsu_rdata                  (    lsu_rdata                ),
+	.lsu_ack                    (    lsu_ack                  ),
+   
+	.mem_vld                    (    mem_vld                  ),
+	.mem_para                   (    mem_para                 ),
+	.mem_addr                   (    mem_addr                 ),
+	.mem_wdata                  (    mem_wdata                ),
+	.mem_pc                     (    exec_pc                  ),
+    .mem_level                  (    exec_level               ),
+    .mem_sel                    (    mem_sel                  ),
+    .mem_data                   (    mem_data                 ),
+	.mem_release                (    mem_release              ),
+	
+	.clear_pipeline             (    clear_pipeline           ),
+    .level_decrease             (    level_decrease           ),
+    .level_clear                (    level_clear              ),
+	.rfbuf_order_list           (    rfbuf_order_list         ),	
+    .mmbuf_check_rdnum          (    mmbuf_check_rdnum        ),	
+    .mmbuf_check_rdlist         (    mmbuf_check_rdlist       ),
+	.mmbuf_instr_rdlist         (    mmbuf_instr_rdlist       ),
+	.mmbuf_mem_num              (    mmbuf_mem_num            ),
+	.mmbuf_intflag              (                             ),
+	.mmbuf_intpc                (                             ),
+	.dmem_exception             (    dmem_exception           ),
+	.mem_busy                   (    mem_busy                 )
 	
 	);
 
@@ -416,6 +427,34 @@ module ssrv_top(
         );	
 	end
 	endgenerate
+	
+
+    lsu i_lsu(
+	.clk                        (    clk                      ),
+	.rst                        (    rst                      ),
+    
+	.dmem_req                   (    dmem_req                 ),
+	.dmem_cmd                   (    dmem_cmd                 ),
+	.dmem_width                 (    dmem_width               ),
+	.dmem_addr                  (    dmem_addr                ),
+	.dmem_wdata                 (    dmem_wdata               ),
+	.dmem_rdata                 (    dmem_rdata               ),
+	.dmem_resp                  (    dmem_resp                ),
+	.dmem_err                   (    dmem_err                 ),
+	
+	.lsu_initial                (    lsu_initial              ),
+	.lsu_para                   (    lsu_para                 ),
+	.lsu_addr                   (    lsu_addr                 ),
+	.lsu_wdata                  (    lsu_wdata                ),
+	.lsu_ready                  (    lsu_ready                ),
+	.lsu_finished               (    lsu_finished             ),
+	.lsu_status                 (    lsu_status               ),
+	.lsu_rdata                  (    lsu_rdata                ),
+	.lsu_ack                    (    lsu_ack                  ),
+	
+	.clear_pipeline             (    clear_pipeline           )		
+    );
+
 
 	sys_csr i_sys (	
 	.clk               (    clk                                 ),

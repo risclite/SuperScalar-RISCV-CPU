@@ -10,4 +10,5 @@ vlog -work work -mfcu -sv "+nowarnSVCHK" +incdir+../src/includes/ +incdir+../../
 ../../rtl/schedule.v \
 ../../rtl/instrman.v \
 ../../rtl/instrbits.v \
+../../rtl/lsu.v \
 ../../rtl/ssrv_pipe_top.sv

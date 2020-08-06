@@ -285,9 +285,9 @@
         end
     endfunction		
 	
-	function `N(`MMCMB_OFF) sub_order(input `N(`MMCMB_OFF) n, input x);
+	function `N(`MMCMB_OFF) sub_order(input `N(`MMCMB_OFF) n, input `N(`MEM_OFF) x);
 	    begin
-		    sub_order = (n==0) ? 0 : (n-x);
+		    sub_order = (n<x) ? 0 : (n-x);
 		end
 	endfunction
 	
