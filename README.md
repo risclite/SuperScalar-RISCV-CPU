@@ -69,6 +69,7 @@ SSRV is inspired by and based on [SCR1](https://github.com/syntacore/scr1) of Sy
           |---- mprf.v
           |---- membuf.v
           |---- mul.v
+	  |---- lsu.v
           |---- sys_csr.v
         
         define.v       ------------------------ the defination verilog file
