@@ -1,16 +1,8 @@
 # SuperScalar-RISCV-CPU
 
-SSRV(Super-Scalar RISC-V) --- Super-scalar out-of-order RV32IMC CPU core,  performance: 6.0 CoreMark/MHz.
-
-## Overview ##
-
-SSRV is an open-source RV32IMC CPU core. It is synthesizable and parameterizable. You can define different configuration scheme to get different performance,  which ranges within 2.9-6.4 CoreMark/MHz, 2.6-4.9 DMIPS/MHz(best) and 1.5-2.8 DMIPS/MHz(legal). The recommended configuration scheme of 6.0 CoreMark/MHz could have Fmax: 30MHz on an Intel DE2-115 FPGA board. 
+SSRV(Super-Scalar RISC-V) --- Super-scalar out-of-order RV32IMC CPU core,  performance: 6.4 CoreMark/MHz.
 
 ## Feature ##
-
-* Configurable 4 to 5 stage pipeline implementation
-
-* 4 chained parameterized buffers, configurable sizes and ports
 
 * Its instruction set is RV32IMC.
 
@@ -18,25 +10,49 @@ SSRV is an open-source RV32IMC CPU core. It is synthesizable and parameterizable
 
 ![diagram](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/png/diagram.png)
 
-To define 4 chained buffers is an easy way to get a configuration scheme, which accommodates instructions in flight. Let's set N as a number of instruction parallelism. The below lists give each buffer these parameters as "input size, capacity size, output size".
+SSRV is an instruction set processing architecture for RV32IMC. Its main architecture is four buffers linked together, with an instruction bus configured as 32\*N bit and a fixed 32 bit data bus. It has corresponding performance as long as the following parameters are configured:
 
-* The instrbits buffer: N\*32 bits,  3\*N\*32 bits, N instr(Only output is indentified as instr)
+* INSTR_MISALLIGNED --- Whether the instruction bus is in misaligned mode.
 
-* The schedule buffer: N instr, 2\*N instr, N instr(means N ALUs)
+* FETCH_REGISTERED --- Whether the first buffer registers its output.
 
-* The membuf buffer: N instr, 2\*N instr, 1 instr(fixed, only one data memory interface)
+* MULT_NUM --- The number of hardware MUL/DIV modules.
+
+* The ‘instrbits’ buffer --- （input/capacity/output）
+
+* The ‘schedule’ buffer --- （input/capacity/output）
+
+* The ‘membuf’ buffer --- （input/capacity/output）
+
+* The ‘mprf’ buffer --- （input/capacity/output）
 	
-* The mprf buffer: N instr, 2\*N instr, N instr
-	
-|N            |	CoreMark ticks |CoreMark/MHz(estimated) |	DMIPS/MHz(best) |	DMIPS/MHz(legal)   |
-|-------------|----------------|------------------------|-------------------|----------------------|
-|    16       | 1567           |  6.38                  |    4.94           | 2.82                 |
-|     8       | 1583           |  6.32                  |    4.94           | 2.79                 |
-|     4       | 1646           |  6.08                  |    4.82           | 2.75                 |
-|     2       | 2072           |  4.83                  |    4.24           | 2.39                 |
-|     1       | 3452           |  2.90                  |    2.67           | 1.48                 |
+|Configuration                        |CoreMark/MHz            |   DMIPS/MHz(best) | DMIPS/MHz(legal)     |
+|-------------------------------------|------------------------|-------------------|----------------------|
+|Yes Yes 3 4-8-4 6-3 8-2 8-3          |  6.4                   |    4.8            | 2.8                  |
+|No  Yes 3 4-8-4 6-3 8-2 8-3          |  6.2                   |    4.8            | 2.7                  |
+|No  Yes 1 4-8-4 6-3 8-2 8-3          |  5.8                   |    4.8            | 2.7                  |
+|No  No  1 1-2-1 2-1 2-1 2-1          |  2.9                   |    2.7            | 1.5                  |
+|No  No  1 2-4-2 4-2 4-2 4-2          |  4.9                   |    4.3            | 2.5                  |
+|Yes Yes 2 2-4-2 4-2 4-2 4-2          |  5.1                   |    4.3            | 2.5                  |
+|Yes Yes 4 4-8-4 8-4 8-4 8-4          |  6.4                   |    4.8            | 2.8                  |
+|Yes Yes 8 8-16-8 16-8 16-8 16-8      |  6.6                   |    5.0            | 2.8                  |
+|Yes Yes 16 16-32-16 32-16 32-16 32-16|  6.6                   |    5.0            | 2.8                  |
 
 --RISCV gcc version: 8.3.0
+
+The above parameters can be configured arbitrarily to run the simulation. However, in FPGA synthesis, appropriate parameters must be selected to satisfy the timing requirement. Here are examples of configuration and timing on the DE2-115 FPGA development board:
+
+|Configuration                        |CoreMark/MHz            |  Fmax(Slow model) | Logic ratio          |
+|-------------------------------------|------------------------|-------------------|----------------------|
+|SCR1  with fast MUL                  |  2.1                   |    34.0 MHz       | 5%                   |
+|SCR1  without fast MUL               |  1.3                   |    30.7 MHz       | 5%                   |
+|No  No  1 1-2-1 2-1 2-1 2-1          |  2.9                   |    32.6 MHz       | 12%                  |
+|Yes Yes 2 2-4-2 4-2 4-2 4-2          |  4.9                   |    32.1 MHz       | 19%                  |
+|Yes Yes 2 4-7-3 6-3 6-2 6-2          |  6.0                   |    29.2 MHz       | 31%                  |
+
+This is my favorite configuration: " Yes Yes 3 4-8-4 6-3 8-2 8-3", which is at the critical point of synthesizable and high performance.
+For more information, please download the Chinese guide: ![PDF](https://github.com/risclite/SuperScalar-RISCV-CPU/blob/master/wiki/SSRV%E5%85%A8%E8%A7%A3%E6%9E%90.pdf). Or,add my WeChat: rvlite and have a discussion.
+
 
 
 ## Structure ##
